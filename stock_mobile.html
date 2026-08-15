@@ -229,6 +229,7 @@ input{font-family:inherit}
       <div class="sentBox" id="sentBox"></div>
       <button id="btnResend" class="btn go big">ส่งซ้ำ</button>
       <button id="btnBackEdit" class="btn ghost big">กลับไปแก้</button>
+      <button id="btnBackHome" class="btn ghost big" hidden>เริ่มรอบใหม่ (กลับไปหน้าใส่รหัส)</button>
     </div>
   </section>
 
@@ -604,9 +605,23 @@ $("#btnBackEdit").addEventListener("click", () => {
   showScreen("count");
   renderRows();
 });
+$("#btnBackHome").addEventListener("click", () => {
+  if (pendingSend) return; // ยังส่งไม่สำเร็จ ห้ามทิ้งรอบนี้ไปเฉย ๆ เดี๋ยวข้อมูลหาย
+  store.remove(draftKey(code));
+  store.remove("sc_last_code");
+  code = null;
+  job = null;
+  counts = {};
+  pendingSend = false;
+  lastSentAt = null;
+  $("#inCode").value = "";
+  validateJoinForm();
+  showScreen("join");
+});
 
 function renderSentBox(){
   const box = $("#sentBox");
+  $("#btnBackHome").hidden = !(lastSentAt && !pendingSend);
   if (pendingSend){
     box.innerHTML = `
       <div class="big-icon">⏳</div>
