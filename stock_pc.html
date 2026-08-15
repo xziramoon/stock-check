@@ -111,6 +111,9 @@ tbody td{padding:7px 10px;border-bottom:1px solid var(--rule);vertical-align:mid
 [contenteditable]{border-radius:2px;padding:2px 4px;margin:0 -4px;transition:background .12s;min-height:1.3em}
 [contenteditable]:hover{background:rgba(31,111,92,.08);box-shadow:inset 0 -1px 0 rgba(31,111,92,.35)}
 [contenteditable]:focus{outline:none;background:rgba(31,111,92,.13);box-shadow:inset 0 -1px 0 var(--go)}
+td select{font:inherit;color:inherit;border:1px solid transparent;border-radius:2px;padding:2px 4px;margin:0 -4px;background:transparent;cursor:pointer}
+td select:hover{background:rgba(31,111,92,.08)}
+td select:focus{outline:none;background:rgba(31,111,92,.13)}
 .colName{width:34%}
 .colUnit{width:12%}
 .colTarget{width:12%;font-family:"IBM Plex Mono",monospace;font-weight:600;text-align:right}
@@ -528,6 +531,14 @@ const store = {
 const $ = s => document.querySelector(s);
 const esc = s => String(s ?? "").replace(/[&<>]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" }[c]));
 
+// หน่วยนับที่เลือกได้ — ถ้าค่าปัจจุบันไม่อยู่ในลิสต์ (เช่น พิมพ์เองมาก่อน หรือวางจาก Excel) จะแทรกเป็นตัวเลือกเพิ่มให้ ไม่ทำข้อมูลหาย
+const UNITS = ["ชิ้น", "แพ็ค", "ลัง"];
+function unitOptionsHtml(current){
+  const cur = current || UNITS[0];
+  const list = UNITS.includes(cur) ? UNITS : [cur, ...UNITS];
+  return list.map(u => `<option value="${esc(u)}"${u === cur ? " selected" : ""}>${esc(u)}</option>`).join("");
+}
+
 let toastT;
 function toast(msg){
   const t = $("#toast"); t.textContent = msg; t.classList.add("on");
@@ -603,7 +614,7 @@ function renderStep1(){
     tr.dataset.i = i;
     tr.innerHTML = `
       <td class="colName" contenteditable data-k="name">${esc(it.name)}</td>
-      <td class="colUnit" contenteditable data-k="unit">${esc(it.unit)}</td>
+      <td class="colUnit"><select data-k="unit">${unitOptionsHtml(it.unit)}</select></td>
       <td class="colTarget" contenteditable data-k="target">${it.target || 0}</td>
       <td class="colRep" contenteditable data-k="rep">${esc(it.rep)}</td>
       <td class="colDel"><button data-act="del" title="ลบแถว">✕</button></td>`;
@@ -612,14 +623,17 @@ function renderStep1(){
 }
 renderStep1();
 
-$("#step1Rows").addEventListener("input", e => {
+function handleStep1Edit(e){
   const el = e.target, tr = el.closest("tr");
   if (!tr || !el.dataset.k) return;
   const it = items[+tr.dataset.i];
   if (el.dataset.k === "target") it.target = parseInt(el.textContent.replace(/[^\d]/g, ""), 10) || 0;
+  else if (el.dataset.k === "unit") it.unit = el.value;
   else it[el.dataset.k] = el.textContent.trim();
   saveItems();
-});
+}
+$("#step1Rows").addEventListener("input", handleStep1Edit);
+$("#step1Rows").addEventListener("change", handleStep1Edit);
 $("#step1Rows").addEventListener("click", e => {
   const b = e.target.closest("button[data-act='del']"); if (!b) return;
   items.splice(+b.closest("tr").dataset.i, 1);
@@ -999,7 +1013,7 @@ function planRowHtml(r){
        <input class="extraRep" type="text" data-k="rep" data-id="${esc(r.id)}" value="${esc(r.rep)}" placeholder="ระบุเซล">`
     : esc(r.name);
   const unitCell = r.isExtra
-    ? `<span contenteditable data-k="unit" data-id="${esc(r.id)}">${esc(r.unit)}</span>`
+    ? `<select data-k="unit" data-id="${esc(r.id)}">${unitOptionsHtml(r.unit)}</select>`
     : esc(r.unit);
   return `
     <tr data-id="${esc(r.id)}" class="${r.plan.dropped ? "dropped" : ""} ${fine ? "fine" : ""}">
@@ -1053,7 +1067,7 @@ $("#planGroups").addEventListener("input", e => {
     updatePlanTopBarOnly();
     return;
   }
-  if (el.dataset.k && el.dataset.k !== "rep"){
+  if (el.dataset.k && el.dataset.k !== "rep" && el.dataset.k !== "unit"){
     const plan = loadPlan();
     const entry = findPlanEntry(plan, el.dataset.id); if (!entry) return;
     entry[el.dataset.k] = el.textContent;
@@ -1061,14 +1075,16 @@ $("#planGroups").addEventListener("input", e => {
   }
 });
 $("#planGroups").addEventListener("change", e => {
-  if (e.target.dataset.k !== "rep") return;
+  const k = e.target.dataset.k;
+  if (k !== "rep" && k !== "unit") return;
   const plan = loadPlan();
   const entry = findPlanEntry(plan, e.target.dataset.id); if (!entry) return;
-  entry.rep = e.target.value.trim();
+  if (k === "rep") entry.rep = e.target.value.trim();
+  if (k === "unit") entry.unit = e.target.value;
   savePlan(plan); renderStep3();
 });
 $("#planGroups").addEventListener("focusout", e => {
-  if (e.target.classList.contains("orderQty") || e.target.dataset.k === "name" || e.target.dataset.k === "unit") renderStep3();
+  if (e.target.classList.contains("orderQty") || e.target.dataset.k === "name") renderStep3();
 });
 $("#btnHideOk").addEventListener("click", () => {
   hideOk = !hideOk;
@@ -1194,7 +1210,7 @@ function renderSheetRows(){
       <td class="sIdx">${n}</td>
       <td class="sName" contenteditable data-sk="name">${esc(it.name)}</td>
       <td class="sQty" contenteditable inputmode="numeric" data-sk="qty">${it.qty}</td>
-      <td class="sUnit" contenteditable data-sk="unit">${esc(it.unit)}</td>
+      <td class="sUnit"><select data-sk="unit">${unitOptionsHtml(it.unit)}</select></td>
       <td class="sTools"><button data-sact="del" title="ลบออกจากใบนี้">✕</button></td>`;
     tb.appendChild(tr);
   });
@@ -1222,22 +1238,24 @@ document.addEventListener("input", e => {
   }
   saveExportDraft();
 });
-$("#sheetRows").addEventListener("input", e => {
+function handleSheetRowEdit(e){
   const el = e.target, tr = el.closest("tr");
   if (!tr || !el.dataset.sk) return;
   const it = exportDraft.items[+tr.dataset.i];
   if (el.dataset.sk === "name") it.name = el.textContent.trim();
   if (el.dataset.sk === "qty") it.qty = parseInt(el.textContent.replace(/[^\d]/g, ""), 10) || 0;
-  if (el.dataset.sk === "unit") it.unit = el.textContent.trim();
+  if (el.dataset.sk === "unit") it.unit = el.value;
   saveExportDraft();
-});
+}
+$("#sheetRows").addEventListener("input", handleSheetRowEdit);
+$("#sheetRows").addEventListener("change", handleSheetRowEdit);
 $("#sheetRows").addEventListener("focusout", e => {
   const el = e.target, tr = el.closest("tr"); if (!tr) return;
   if (el.dataset.sk === "name"){
     const it = exportDraft.items[+tr.dataset.i];
     if (it.type === "item" && it.originalName){ nameMap[it.originalName] = it.name; store.set("sc_namemap", nameMap); }
   }
-  if (el.dataset.sk === "qty" || el.dataset.sk === "unit" || el.dataset.sk === "name") renderSheetRows();
+  if (el.dataset.sk === "qty" || el.dataset.sk === "name") renderSheetRows();
 });
 $("#sheetRows").addEventListener("click", e => {
   const b = e.target.closest("button[data-sact='del']"); if (!b) return;
