@@ -1096,6 +1096,7 @@ $("#btnResetStep3").addEventListener("click", () => {
    ============================================================ */
 function exportKey(code){ return "sc_export_" + code; }
 let nameMap = store.get("sc_namemap") || {};
+let shopName = store.get("sc_shopname") || "ร้านวงเวียน"; // ชื่อบริษัท/ร้าน จำถาวรข้ามรอบ แก้ได้ตรงหัวบิล
 let exportDraft = null;
 let repFilter = "";
 
@@ -1131,7 +1132,7 @@ function initExportDraft(force){
     exportDraft = saved;
   } else {
     exportDraft = {
-      head: { shop: "ร้านวงเวียน", branch: activeRound.job.branch, date: thaiDateS(), rep: "", note: "" },
+      head: { shop: shopName, branch: activeRound.job.branch, date: thaiDateS(), rep: "", note: "" },
       items: buildExportItemsFromPlan(),
     };
     store.set(exportKey(activeRound.code), exportDraft);
@@ -1215,6 +1216,10 @@ document.addEventListener("input", e => {
   const el = e.target;
   if (!el.dataset.sf || !exportDraft) return;
   exportDraft.head[el.dataset.sf] = el.textContent.trim();
+  if (el.dataset.sf === "shop"){
+    shopName = exportDraft.head.shop || "ร้านวงเวียน";
+    store.set("sc_shopname", shopName);
+  }
   saveExportDraft();
 });
 $("#sheetRows").addEventListener("input", e => {
