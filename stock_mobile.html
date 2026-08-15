@@ -1,0 +1,631 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+<title>เช็คสต๊อก — มือถือ</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bai+Jamjuree:wght@500;600;700&family=Sarabun:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500;600&display=swap" rel="stylesheet">
+<script src="https://unpkg.com/mqtt@5/dist/mqtt.min.js"></script>
+<style>
+:root{
+  --ink:#16232e;
+  --ink-soft:#5a6b74;
+  --paper:#fffdf8;
+  --desk:#e2e7e3;
+  --desk-edge:#cdd5d0;
+  --rule:#ccd8d3;
+  --stamp:#b4302a;
+  --go:#1f6f5c;
+  --radius:3px;
+}
+*{box-sizing:border-box}
+html,body{margin:0;padding:0}
+body{
+  background:var(--desk);
+  color:var(--ink);
+  font-family:"Sarabun",system-ui,sans-serif;
+  font-size:15px;
+  line-height:1.5;
+  -webkit-font-smoothing:antialiased;
+  overflow-x:hidden;
+}
+button{font-family:inherit;cursor:pointer}
+input{font-family:inherit}
+:focus-visible{outline:2px solid var(--go);outline-offset:2px}
+
+/* ---------- topbar + ไฟสถานะเชื่อมต่อ ---------- */
+.topbar{
+  position:sticky;top:0;z-index:40;
+  display:flex;align-items:center;gap:10px;
+  padding:10px 14px;
+  background:var(--ink);color:#eef2f0;
+  border-bottom:3px solid var(--stamp);
+}
+.brand{font-family:"Bai Jamjuree",sans-serif;font-weight:700;font-size:16px;letter-spacing:.02em}
+.brand span{display:block;color:#8fb3a8;font-weight:500;font-size:11px;letter-spacing:0}
+.topbar .spacer{flex:1}
+.conn{display:flex;align-items:center;gap:6px;font-size:11.5px;color:#c8d6d1;white-space:nowrap}
+.dot{width:10px;height:10px;border-radius:50%;background:#888;box-shadow:0 0 0 2px rgba(255,255,255,.08)}
+.dot-green{background:#3fc98a}
+.dot-yellow{background:#e8b23d}
+.dot-red{background:#e05a4d}
+
+/* ---------- โครงหน้าจอทั่วไป ---------- */
+.wrap{max-width:520px;margin:0 auto;padding:14px;width:100%}
+.screen{width:100%}
+.card{
+  background:#f6f8f6;border:1px solid var(--desk-edge);border-radius:var(--radius);
+  padding:18px 16px;margin:0 auto;
+}
+.joincard{max-width:420px}
+.joincard h2{margin:0 0 14px;font-family:"Bai Jamjuree",sans-serif;font-size:19px}
+.field{display:block;margin-bottom:14px}
+.field span{display:block;font-size:12.5px;color:var(--ink-soft);margin-bottom:5px}
+.field input{
+  width:100%;height:48px;font-size:18px;padding:0 12px;
+  border:1px solid var(--desk-edge);border-radius:var(--radius);background:#fff;color:var(--ink);
+}
+.field input:focus{border-color:var(--go)}
+.btn{
+  display:block;width:100%;text-align:center;padding:12px;margin-top:8px;
+  border:1px solid var(--ink);background:#fff;color:var(--ink);
+  border-radius:var(--radius);font-size:15px;font-weight:600;min-height:44px;
+}
+.btn:hover{background:var(--ink);color:#fff}
+.btn:disabled{opacity:.45;cursor:not-allowed}
+.btn:disabled:hover{background:#fff;color:var(--ink)}
+.btn.go{background:var(--go);border-color:var(--go);color:#fff}
+.btn.go:hover{background:#175344}
+.btn.ghost{border-color:var(--desk-edge);color:var(--ink-soft);font-weight:500}
+.btn.ghost:hover{background:#e9ede9;color:var(--ink)}
+.btn.big{padding:14px;font-size:16px}
+.hint{font-size:12.5px;color:var(--ink-soft);margin:8px 0 0;line-height:1.5}
+.joinMsg{font-size:13px;color:var(--stamp);margin-top:10px}
+
+/* ---------- หน้านับ: แถบบนค้าง ---------- */
+.countTop{
+  position:sticky;top:47px;z-index:30;
+  background:var(--desk);padding:10px 0 8px;
+  border-bottom:1px solid var(--desk-edge);
+}
+.progressRow{display:flex;justify-content:space-between;align-items:baseline;font-size:13.5px;padding:0 2px;margin-bottom:6px}
+.progressRow b{font-family:"IBM Plex Mono",monospace}
+.progressBar{height:8px;background:#d3dbd6;border-radius:5px;overflow:hidden;margin:0 2px}
+.progressFill{height:100%;background:var(--go);width:0%;transition:width .2s}
+.filters{display:flex;gap:6px;margin-top:9px}
+.filt{
+  flex:1;padding:9px 4px;border:1px solid var(--desk-edge);background:#fff;color:var(--ink-soft);
+  border-radius:var(--radius);font-size:13px;font-weight:600;min-height:44px;
+}
+.filt.on{background:var(--ink);border-color:var(--ink);color:#fff}
+
+/* ---------- แถวรายการนับ ---------- */
+.rows{background:#fff;border:1px solid var(--desk-edge);border-radius:var(--radius);margin-top:10px;overflow:hidden}
+.row{padding:12px 12px;border-bottom:1px solid var(--rule)}
+.row:last-child{border-bottom:0}
+.row.st-none{background:rgba(180,48,42,.08)}
+.row .name{font-size:17px;font-weight:500;margin-bottom:9px;word-break:break-word}
+.row .ctrl{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.row input.qty{
+  width:84px;height:48px;font-size:20px;text-align:center;font-family:"IBM Plex Mono",monospace;
+  border:1px solid var(--desk-edge);border-radius:var(--radius);background:#fff;color:var(--ink);
+  font-weight:600;
+}
+.row input.qty:focus{border-color:var(--go)}
+.row .unit{font-size:14px;color:var(--ink-soft);min-width:36px}
+.row .btnNone{
+  margin-left:auto;min-height:44px;padding:0 12px;border:1px solid var(--stamp);color:var(--stamp);
+  background:#fff;border-radius:var(--radius);font-size:13px;font-weight:600;white-space:nowrap;
+}
+.row.st-none .btnNone{background:var(--stamp);color:#fff}
+.row .stTag{font-size:12px;color:var(--ink-soft)}
+.empty{padding:26px 12px;text-align:center;color:var(--ink-soft);font-size:14px}
+
+/* ---------- ปุ่มส่งค้างล่างจอ ---------- */
+.bottomBar{
+  position:sticky;bottom:0;left:0;right:0;
+  background:var(--desk);padding:10px 0 14px;margin-top:8px;
+  border-top:1px solid var(--desk-edge);
+}
+.pendingNote{
+  font-size:12.5px;color:var(--stamp);text-align:center;margin:0 0 8px;
+  background:rgba(180,48,42,.08);border:1px solid rgba(180,48,42,.3);border-radius:var(--radius);padding:7px 10px;
+}
+
+/* ---------- หน้าส่งแล้ว ---------- */
+.sentBox{text-align:center;margin-bottom:16px}
+.sentBox .big-icon{font-size:40px;margin-bottom:8px}
+.sentBox .st-ok{color:var(--go);font-weight:700;font-size:17px}
+.sentBox .st-wait{color:var(--stamp);font-weight:700;font-size:17px}
+.sentBox .sub{font-size:13px;color:var(--ink-soft);margin-top:6px}
+
+/* ---------- โมดัลถามว่าจะทำต่อไหม ---------- */
+.modalWrap{
+  position:fixed;inset:0;background:rgba(22,35,46,.55);z-index:60;
+  display:flex;align-items:center;justify-content:center;padding:16px;
+}
+.modalCard{
+  background:var(--paper);border-radius:var(--radius);padding:22px 20px;max-width:360px;width:100%;
+  box-shadow:0 14px 30px rgba(22,35,46,.25);
+}
+.modalCard p{margin:0 0 16px;font-size:15px}
+.modalBtns{display:flex;gap:10px}
+.modalBtns .btn{margin-top:0}
+
+.toast{
+  position:fixed;left:50%;bottom:20px;transform:translateX(-50%) translateY(16px);
+  background:var(--ink);color:#fff;padding:11px 20px;border-radius:var(--radius);
+  font-size:13.5px;opacity:0;pointer-events:none;transition:.2s;z-index:70;max-width:90vw;text-align:center;
+}
+.toast.on{opacity:1;transform:translateX(-50%) translateY(0)}
+
+@media(prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <div class="brand">ร้านวงเวียน<span>เช็คสต๊อก · มือถือ</span></div>
+  <div class="spacer"></div>
+  <div class="conn" title="สถานะการเชื่อมต่อ">
+    <span class="dot" data-conn-dot></span>
+    <span data-conn-label>กำลังเชื่อมต่อ...</span>
+  </div>
+</div>
+
+<div class="wrap">
+
+  <!-- ก. หน้าเข้ารอบ -->
+  <section id="screenJoin" class="screen">
+    <div class="card joincard">
+      <h2>เข้ารอบนับสต๊อก</h2>
+      <label class="field">
+        <span>รหัสรอบ (4 หลัก)</span>
+        <input id="inCode" type="text" inputmode="numeric" maxlength="4" placeholder="0000" autocomplete="off">
+      </label>
+      <label class="field">
+        <span>ชื่อคนนับ</span>
+        <input id="inName" type="text" placeholder="เช่น แนน" autocomplete="off">
+      </label>
+      <button id="btnJoin" class="btn go big" disabled>เข้ารอบนับ</button>
+      <p class="joinMsg" id="joinMsg" hidden></p>
+    </div>
+  </section>
+
+  <!-- กำลังรอลิสต์จากคอม -->
+  <section id="screenWait" class="screen" hidden>
+    <div class="card joincard">
+      <h2>รอรับลิสต์...</h2>
+      <p>รหัสรอบ <b id="waitCode" style="font-family:'IBM Plex Mono',monospace"></b></p>
+      <p class="hint" id="waitHint">กำลังเชื่อมต่อและรอลิสต์จากคอม กรุณารอสักครู่</p>
+      <button id="btnWaitBack" class="btn ghost">กลับไปกรอกรหัสใหม่</button>
+    </div>
+  </section>
+
+  <!-- ข. หน้านับ -->
+  <section id="screenCount" class="screen" hidden>
+    <div class="countTop">
+      <div class="progressRow"><span id="progressText">นับแล้ว 0/0</span><span id="codeTag" style="font-family:'IBM Plex Mono',monospace;color:var(--ink-soft)"></span></div>
+      <div class="progressBar"><div class="progressFill" id="progressFill"></div></div>
+      <div class="filters">
+        <button class="filt on" data-f="all">ทั้งหมด</button>
+        <button class="filt" data-f="skip">ยังไม่นับ</button>
+        <button class="filt" data-f="done">นับแล้ว</button>
+      </div>
+    </div>
+    <div class="rows" id="rows"></div>
+    <div class="bottomBar">
+      <p class="pendingNote" id="pendingNote" hidden>ยังไม่ได้ส่ง — จะส่งอัตโนมัติเมื่อเชื่อมต่อได้</p>
+      <button id="btnSubmit" class="btn go big">ส่งผลนับ (0 รายการ)</button>
+    </div>
+  </section>
+
+  <!-- ค. ส่งแล้ว -->
+  <section id="screenSent" class="screen" hidden>
+    <div class="card joincard">
+      <div class="sentBox" id="sentBox"></div>
+      <button id="btnResend" class="btn go big">ส่งซ้ำ</button>
+      <button id="btnBackEdit" class="btn ghost big">กลับไปแก้</button>
+    </div>
+  </section>
+
+</div>
+
+<!-- โมดัลถามว่ามี draft ค้างอยู่ ทำต่อไหม -->
+<div class="modalWrap" id="resumeModal" hidden>
+  <div class="modalCard">
+    <p id="resumeText">มีรอบนับค้างอยู่ ทำต่อไหม</p>
+    <div class="modalBtns">
+      <button id="btnResumeYes" class="btn go">ทำต่อ</button>
+      <button id="btnResumeNo" class="btn ghost">เริ่มรอบใหม่</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+/* ============================================================
+   เช็คสต๊อก — หน้ามือถือ (เฟส 1)
+   หน้าที่: พนักงานกรอกรหัสรอบ + ชื่อ -> รับลิสต์จากคอมผ่าน MQTT
+            -> กรอกจำนวนนับ -> ส่งผลกลับไปที่คอม
+   ============================================================ */
+
+/* ---------- storage: ใช้ localStorage ถ้าได้ ไม่ได้ก็เก็บในหน่วยความจำ ---------- */
+const mem = {};
+const store = {
+  get(k){ try{ const v = localStorage.getItem(k); return v!=null ? JSON.parse(v) : (mem[k] ?? null); }catch(e){ return mem[k] ?? null; } },
+  set(k,v){ mem[k]=v; try{ localStorage.setItem(k, JSON.stringify(v)); }catch(e){} },
+  remove(k){ delete mem[k]; try{ localStorage.removeItem(k); }catch(e){} }
+};
+
+const $ = s => document.querySelector(s);
+
+/* ---------- toast แจ้งเตือนสั้น ๆ ---------- */
+let toastT;
+function toast(msg){
+  const t = $("#toast"); t.textContent = msg; t.classList.add("on");
+  clearTimeout(toastT); toastT = setTimeout(() => t.classList.remove("on"), 2400);
+}
+
+/* ---------- สถานะแอป ---------- */
+let code = "";              // รหัสรอบปัจจุบัน
+let counterName = "";       // ชื่อคนนับ
+let job = null;             // {v,code,branch,createdAt,items[]} ที่ได้จากคอม
+let counts = {};            // { itemId: {qty, status} }  status: skip | counted | none
+let filter = "all";         // ตัวกรองที่กำลังเลือก: all | skip | done
+let pendingSend = false;    // true = กดส่งไปแล้วแต่ยังไม่ได้ publish (ออฟไลน์)
+let lastSentAt = null;      // เวลาที่ส่งสำเร็จล่าสุด (แสดงในหน้าส่งแล้ว)
+let waitTimer = null;
+
+/* ---------- MQTT ---------- */
+let mqttClient = null;
+
+function makeClientId(prefix){
+  const n = Math.floor(100000 + Math.random() * 900000); // สุ่ม 6 หลัก
+  return prefix + n;
+}
+
+function setConnStatus(state){ // 'connecting' | 'connected' | 'disconnected'
+  document.querySelectorAll("[data-conn-dot]").forEach(el => {
+    el.classList.remove("dot-green", "dot-yellow", "dot-red");
+    el.classList.add(state === "connected" ? "dot-green" : state === "connecting" ? "dot-yellow" : "dot-red");
+  });
+  document.querySelectorAll("[data-conn-label]").forEach(el => {
+    el.textContent = state === "connected" ? "เชื่อมต่อแล้ว" : state === "connecting" ? "กำลังเชื่อมต่อ..." : "หลุดการเชื่อมต่อ";
+  });
+}
+
+function connectMqtt(){
+  setConnStatus("connecting");
+  mqttClient = mqtt.connect("wss://broker.emqx.io:8084/mqtt", {
+    clientId: makeClientId("sc-mb-"),
+    clean: true,
+    reconnectPeriod: 2000,
+    connectTimeout: 8000,
+  });
+  mqttClient.on("connect", () => {
+    setConnStatus("connected");
+    // เชื่อมต่อ(กลับ)ได้แล้ว — subscribe รหัสรอบปัจจุบันอีกครั้ง (เผื่อเพิ่ง reconnect)
+    if (code) mqttClient.subscribe("branch-nuea-stock/req/" + code, { qos: 1 });
+    // ถ้ามีผลนับค้างส่งอยู่ ให้ส่งอัตโนมัติทันที
+    if (pendingSend) trySendResult();
+  });
+  mqttClient.on("reconnect", () => setConnStatus("connecting"));
+  mqttClient.on("close", () => setConnStatus("disconnected"));
+  mqttClient.on("offline", () => setConnStatus("disconnected"));
+  mqttClient.on("error", () => setConnStatus("disconnected"));
+  mqttClient.on("message", onMqttMessage);
+}
+
+function onMqttMessage(topic, payload){
+  if (topic !== "branch-nuea-stock/req/" + code) return;
+  let data;
+  try { data = JSON.parse(payload.toString()); } catch(e){ return; }
+  if (!data || !data.items) return;
+  clearTimeout(waitTimer);
+  job = data;
+  // ผสานกับ counts เดิม (ถ้ามีจาก draft) — รายการใหม่เริ่มที่ skip
+  const merged = {};
+  job.items.forEach(it => { merged[it.id] = counts[it.id] || { qty: null, status: "skip" }; });
+  counts = merged;
+  saveDraft();
+  showScreen("count");
+  renderRows();
+}
+
+/* ---------- localStorage: draft ของรอบที่กำลังนับอยู่ ---------- */
+function draftKey(c){ return "sc_draft_" + c; }
+
+function saveDraft(){
+  if (!code) return;
+  store.set(draftKey(code), {
+    code, counter: counterName, job, counts,
+    pendingSend, lastSentAt, updatedAt: Date.now(),
+  });
+  store.set("sc_last_code", code);
+}
+
+function loadDraft(c){
+  return store.get(draftKey(c));
+}
+
+/* ---------- สลับหน้าจอ ---------- */
+function showScreen(name){
+  ["Join", "Wait", "Count", "Sent"].forEach(n => {
+    $("#screen" + n).hidden = n.toLowerCase() !== name;
+  });
+}
+
+/* ---------- ตรวจ draft ค้างตอนเปิดแอป ---------- */
+function checkResumeOnOpen(){
+  const lastCode = store.get("sc_last_code");
+  if (!lastCode) return false;
+  const draft = loadDraft(lastCode);
+  if (!draft || !draft.job) return false;
+  $("#resumeText").textContent = `มีรอบนับค้างอยู่ (รหัส ${lastCode}) ทำต่อไหม`;
+  $("#resumeModal").hidden = false;
+  $("#btnResumeYes").onclick = () => {
+    $("#resumeModal").hidden = true;
+    resumeDraft(draft);
+  };
+  $("#btnResumeNo").onclick = () => {
+    $("#resumeModal").hidden = true;
+    store.remove(draftKey(lastCode));
+    store.remove("sc_last_code");
+  };
+  return true;
+}
+
+function resumeDraft(draft){
+  code = draft.code;
+  counterName = draft.counter;
+  job = draft.job;
+  counts = draft.counts || {};
+  pendingSend = !!draft.pendingSend;
+  lastSentAt = draft.lastSentAt || null;
+  $("#inCode").value = code;
+  $("#inName").value = counterName;
+  connectMqtt(); // code ถูกตั้งไว้แล้วด้านบน — connectMqtt() จะ subscribe ให้เองตอน connect
+  if (pendingSend){
+    showScreen("sent");
+    renderSentBox();
+  } else if (lastSentAt) {
+    showScreen("sent");
+    renderSentBox();
+  } else {
+    showScreen("count");
+    renderRows();
+  }
+}
+
+/* ---------- หน้าเข้ารอบ ---------- */
+const savedName = store.get("sc_name");
+if (savedName) $("#inName").value = savedName;
+
+function validateJoinForm(){
+  const c = $("#inCode").value.trim();
+  const n = $("#inName").value.trim();
+  $("#btnJoin").disabled = !(/^\d{4}$/.test(c) && n.length > 0);
+}
+$("#inCode").addEventListener("input", e => {
+  e.target.value = e.target.value.replace(/[^\d]/g, "").slice(0, 4);
+  validateJoinForm();
+});
+$("#inName").addEventListener("input", validateJoinForm);
+validateJoinForm();
+
+$("#btnJoin").addEventListener("click", () => {
+  code = $("#inCode").value.trim();
+  counterName = $("#inName").value.trim();
+  store.set("sc_name", counterName);
+  store.set("sc_last_code", code);
+
+  // ถ้ามี draft เดิมของรหัสนี้อยู่แล้ว (เช่นเคยนับค้างไว้) ให้กู้คืนจำนวนที่กรอกไว้
+  const existing = loadDraft(code);
+  counts = (existing && existing.counter === counterName) ? (existing.counts || {}) : {};
+  job = null;
+  pendingSend = false;
+  lastSentAt = null;
+
+  $("#waitCode").textContent = code;
+  $("#waitHint").textContent = "กำลังเชื่อมต่อและรอลิสต์จากคอม กรุณารอสักครู่";
+  showScreen("wait");
+
+  if (!mqttClient) connectMqtt();
+  else if (mqttClient.connected) mqttClient.subscribe("branch-nuea-stock/req/" + code, { qos: 1 });
+
+  clearTimeout(waitTimer);
+  waitTimer = setTimeout(() => {
+    $("#waitHint").textContent = "ยังไม่พบลิสต์ — ตรวจสอบรหัสอีกครั้ง หรือรอสักครู่ (ระบบจะรอต่อไปเรื่อย ๆ)";
+  }, 8000);
+});
+
+$("#btnWaitBack").addEventListener("click", () => {
+  clearTimeout(waitTimer);
+  showScreen("join");
+});
+
+/* ---------- หน้านับ: วาดรายการ ---------- */
+function itemProgress(){
+  const total = job ? job.items.length : 0;
+  let handled = 0;
+  Object.values(counts).forEach(c => { if (c.status === "counted" || c.status === "none") handled++; });
+  return { handled, total };
+}
+
+function passesFilter(st){
+  if (filter === "all") return true;
+  if (filter === "skip") return st === "skip";
+  if (filter === "done") return st === "counted" || st === "none";
+  return true;
+}
+
+function renderRows(){
+  if (!job) return;
+  const rowsEl = $("#rows");
+  rowsEl.innerHTML = "";
+  $("#codeTag").textContent = "#" + code;
+
+  const { handled, total } = itemProgress();
+  $("#progressText").innerHTML = `นับแล้ว <b>${handled}/${total}</b>`;
+  $("#progressFill").style.width = total ? (handled / total * 100) + "%" : "0%";
+  $("#btnSubmit").textContent = `ส่งผลนับ (${handled} รายการ)`;
+
+  let shown = 0;
+  job.items.forEach(it => {
+    const c = counts[it.id] || { qty: null, status: "skip" };
+    if (!passesFilter(c.status)) return;
+    shown++;
+    const row = document.createElement("div");
+    row.className = "row" + (c.status === "none" ? " st-none" : "");
+    row.dataset.id = it.id;
+    row.innerHTML = `
+      <div class="name">${esc(it.name)}</div>
+      <div class="ctrl">
+        <input class="qty" type="text" inputmode="numeric" data-id="${it.id}" value="${c.qty ?? ""}" placeholder="0">
+        <span class="unit">${esc(it.unit)}</span>
+        <button class="btnNone" data-id="${it.id}">${c.status === "none" ? "ของหมด ✓" : "ไม่มีของ"}</button>
+      </div>`;
+    rowsEl.appendChild(row);
+  });
+  if (!shown){
+    rowsEl.innerHTML = `<div class="empty">ไม่มีรายการในหมวดนี้</div>`;
+  }
+
+  if (pendingSend){
+    $("#pendingNote").hidden = false;
+  } else {
+    $("#pendingNote").hidden = true;
+  }
+}
+const esc = s => String(s ?? "").replace(/[&<>]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" }[c]));
+
+/* กดปุ่มกรอง */
+document.querySelectorAll(".filt").forEach(b => {
+  b.addEventListener("click", () => {
+    document.querySelectorAll(".filt").forEach(x => x.classList.remove("on"));
+    b.classList.add("on");
+    filter = b.dataset.f;
+    renderRows();
+  });
+});
+
+/* พิมพ์จำนวน — เซฟทุกครั้งที่พิมพ์, เลือกข้อความเดิมทั้งหมดเมื่อแตะ */
+$("#rows").addEventListener("focusin", e => {
+  if (e.target.classList.contains("qty")) e.target.select();
+});
+$("#rows").addEventListener("input", e => {
+  const el = e.target;
+  if (!el.classList.contains("qty")) return;
+  el.value = el.value.replace(/[^\d]/g, "");
+  const id = el.dataset.id;
+  if (el.value === ""){
+    counts[id] = { qty: null, status: "skip" };
+  } else {
+    counts[id] = { qty: parseInt(el.value, 10), status: "counted" };
+  }
+  saveDraft();
+  updateProgressOnly();
+});
+/* ปุ่มไม่มีของ */
+$("#rows").addEventListener("click", e => {
+  const b = e.target.closest(".btnNone");
+  if (!b) return;
+  const id = b.dataset.id;
+  counts[id] = { qty: 0, status: "none" };
+  saveDraft();
+  renderRows();
+});
+/* อัปเดตแค่ตัวเลขความคืบหน้า/ปุ่มส่ง โดยไม่ทำให้ input เสียโฟกัสตอนพิมพ์ */
+function updateProgressOnly(){
+  const { handled, total } = itemProgress();
+  $("#progressText").innerHTML = `นับแล้ว <b>${handled}/${total}</b>`;
+  $("#progressFill").style.width = total ? (handled / total * 100) + "%" : "0%";
+  $("#btnSubmit").textContent = `ส่งผลนับ (${handled} รายการ)`;
+}
+
+/* ---------- ส่งผลนับ ---------- */
+function buildResult(){
+  return {
+    v: 1,
+    code,
+    counter: counterName,
+    at: Date.now(),
+    counts: job.items.map(it => {
+      const c = counts[it.id] || { qty: null, status: "skip" };
+      return { id: it.id, qty: c.qty ?? 0, status: c.status };
+    }),
+  };
+}
+
+function trySendResult(){
+  if (!job) return;
+  const result = buildResult();
+  if (mqttClient && mqttClient.connected){
+    mqttClient.publish("branch-nuea-stock/res/" + code, JSON.stringify(result), { qos: 1, retain: false }, (err) => {
+      if (err){
+        pendingSend = true;
+        saveDraft();
+        renderSentBox();
+        return;
+      }
+      pendingSend = false;
+      lastSentAt = Date.now();
+      saveDraft();
+      renderSentBox();
+    });
+  } else {
+    // ออฟไลน์ — เก็บเข้าคิว รอ reconnect แล้วส่งเองอัตโนมัติ
+    pendingSend = true;
+    saveDraft();
+    renderSentBox();
+  }
+}
+
+$("#btnSubmit").addEventListener("click", () => {
+  showScreen("sent");
+  trySendResult();
+});
+$("#btnResend").addEventListener("click", () => {
+  trySendResult();
+  toast("กำลังส่งซ้ำ...");
+});
+$("#btnBackEdit").addEventListener("click", () => {
+  showScreen("count");
+  renderRows();
+});
+
+function renderSentBox(){
+  const box = $("#sentBox");
+  if (pendingSend){
+    box.innerHTML = `
+      <div class="big-icon">⏳</div>
+      <div class="st-wait">ยังไม่ได้ส่ง</div>
+      <div class="sub">เน็ตหลุดอยู่ — ระบบจะส่งให้อัตโนมัติทันทีที่เชื่อมต่อได้ ไม่ต้องกดซ้ำ</div>`;
+  } else if (lastSentAt){
+    const d = new Date(lastSentAt);
+    const t = d.toLocaleTimeString("th-TH", { hour: "2-digit", minute: "2-digit" });
+    box.innerHTML = `
+      <div class="big-icon">✅</div>
+      <div class="st-ok">ส่งผลนับสำเร็จ</div>
+      <div class="sub">รหัสรอบ ${esc(code)} · ผู้นับ ${esc(counterName)} · ส่งเมื่อ ${t}</div>`;
+  } else {
+    box.innerHTML = `
+      <div class="big-icon">⏳</div>
+      <div class="st-wait">กำลังส่ง...</div>
+      <div class="sub">กรุณารอสักครู่</div>`;
+  }
+}
+
+/* ---------- เริ่มทำงาน ---------- */
+const resumed = checkResumeOnOpen();
+if (!resumed){
+  showScreen("join");
+  if (!mqttClient) connectMqtt();
+}
+</script>
+</body>
+</html>
