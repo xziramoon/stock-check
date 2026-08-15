@@ -146,6 +146,7 @@ input{font-family:inherit}
   position:fixed;inset:0;background:rgba(22,35,46,.55);z-index:60;
   display:flex;align-items:center;justify-content:center;padding:16px;
 }
+.modalWrap[hidden]{display:none} /* [hidden] เฉย ๆ แพ้ display:flex ด้านบนเพราะ specificity เท่ากัน ต้องระบุคู่กับคลาสตรง ๆ */
 .modalCard{
   background:var(--paper);border-radius:var(--radius);padding:22px 20px;max-width:360px;width:100%;
   box-shadow:0 14px 30px rgba(22,35,46,.25);
