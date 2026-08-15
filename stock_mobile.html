@@ -332,8 +332,12 @@ function onMqttMessage(topic, payload){
   job.items.forEach(it => { merged[it.id] = counts[it.id] || { qty: null, status: "skip" }; });
   counts = merged;
   saveDraft();
-  showScreen("count");
-  renderRows();
+  // ถ้าส่งผลไปแล้ว (หรือกำลังรอส่งตอนเน็ตหลุด) อย่ากระโดดกลับไปหน้านับ —
+  // ข้อความนี้เป็นลิสต์ retained ที่ได้ซ้ำตอน reconnect/resume เฉย ๆ ไม่ใช่รอบใหม่
+  if (!pendingSend && !lastSentAt){
+    showScreen("count");
+    renderRows();
+  }
 }
 
 /* ---------- localStorage: draft ของรอบที่กำลังนับอยู่ ---------- */
@@ -375,6 +379,8 @@ function checkResumeOnOpen(){
     $("#resumeModal").hidden = true;
     store.remove(draftKey(lastCode));
     store.remove("sc_last_code");
+    showScreen("join");
+    if (!mqttClient) connectMqtt();
   };
   return true;
 }
