@@ -348,7 +348,7 @@ body.capturingS .sTools,body.capturingS .sheetAddrow{display:none!important}
     </div>
 
     <div class="card">
-      <h3>รายการสินค้าที่จะเช็ค<span class="spacer"></span><button class="btn ghost sm" id="btnResetStep1">คืนค่าเดิม</button></h3>
+      <h3>รายการสินค้าที่จะเช็ค<span class="spacer"></span><button class="btn ghost sm" id="btnNewList">เริ่มลิสต์ใหม่</button><button class="btn ghost sm" id="btnResetStep1">คืนค่าเดิม</button></h3>
       <div class="body">
         <table>
           <thead>
@@ -645,6 +645,13 @@ $("#btnAddRow").addEventListener("click", () => {
   saveItems(); renderStep1();
   const cells = document.querySelectorAll("#step1Rows [data-k='name']");
   cells[cells.length - 1]?.focus();
+});
+$("#btnNewList").addEventListener("click", () => {
+  if (items.length && !confirm("ล้างลิสต์ปัจจุบันทั้งหมด แล้วเริ่มลิสต์ใหม่ว่าง ๆ ใช่ไหม?")) return;
+  items = [{ name: "", unit: "ลัง", target: 0, rep: "" }];
+  saveItems(); renderStep1();
+  $("#step1Rows [data-k='name']")?.focus();
+  toast("เริ่มลิสต์ใหม่แล้ว — พิมพ์เพิ่มได้เลย");
 });
 $("#btnResetStep1").addEventListener("click", () => {
   items = JSON.parse(JSON.stringify(step1Snapshot));
