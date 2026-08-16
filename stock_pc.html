@@ -554,10 +554,12 @@ const esc = s => String(s ?? "").replace(/[&<>]/g, c => ({ "&": "&amp;", "<": "&
 
 // หน่วยนับที่เลือกได้ — ถ้าค่าปัจจุบันไม่อยู่ในลิสต์ (เช่น พิมพ์เองมาก่อน หรือวางจาก Excel) จะแทรกเป็นตัวเลือกเพิ่มให้ ไม่ทำข้อมูลหาย
 const UNITS = ["ชิ้น", "แพ็ค", "ลัง"];
+// หน่วยเลือกได้ ไม่บังคับ — เว้นว่างไว้ก่อนได้ ให้พนักงานพิมพ์หน่วยตอนนับที่มือถือแทน
 function unitOptionsHtml(current){
-  const cur = current || UNITS[0];
-  const list = UNITS.includes(cur) ? UNITS : [cur, ...UNITS];
-  return list.map(u => `<option value="${esc(u)}"${u === cur ? " selected" : ""}>${esc(u)}</option>`).join("");
+  const cur = current || "";
+  const list = cur && !UNITS.includes(cur) ? [cur, ...UNITS] : UNITS;
+  return `<option value=""${cur ? "" : " selected"}>— ยังไม่ระบุ —</option>` +
+    list.map(u => `<option value="${esc(u)}"${u === cur ? " selected" : ""}>${esc(u)}</option>`).join("");
 }
 
 let toastT;
@@ -619,7 +621,7 @@ connectMqtt();
 /* ============================================================
    ขั้น 1 — ตั้งลิสต์
    ============================================================ */
-let items = store.get("sc_step1_items") || [{ name: "", unit: "ลัง", target: 0, rep: "" }];
+let items = store.get("sc_step1_items") || [{ name: "", unit: "", target: 0, rep: "" }];
 let step1Snapshot = JSON.parse(JSON.stringify(items)); // สำหรับปุ่ม "คืนค่าเดิม"
 
 $("#inBranch").value = store.get("sc_branch") || "สาขาเหนือ";
@@ -661,14 +663,14 @@ $("#step1Rows").addEventListener("click", e => {
   saveItems(); renderStep1();
 });
 $("#btnAddRow").addEventListener("click", () => {
-  items.push({ name: "", unit: "ลัง", target: 0, rep: "" });
+  items.push({ name: "", unit: "", target: 0, rep: "" });
   saveItems(); renderStep1();
   const cells = document.querySelectorAll("#step1Rows [data-k='name']");
   cells[cells.length - 1]?.focus();
 });
 $("#btnNewList").addEventListener("click", () => {
   if (items.length && !confirm("ล้างลิสต์ปัจจุบันทั้งหมด แล้วเริ่มลิสต์ใหม่ว่าง ๆ ใช่ไหม?")) return;
-  items = [{ name: "", unit: "ลัง", target: 0, rep: "" }];
+  items = [{ name: "", unit: "", target: 0, rep: "" }];
   saveItems(); renderStep1();
   $("#step1Rows [data-k='name']")?.focus();
   toast("เริ่มลิสต์ใหม่แล้ว — พิมพ์เพิ่มได้เลย");
@@ -696,7 +698,7 @@ $("#step1Rows").addEventListener("paste", e => {
   lines.forEach((line, li) => {
     const cells = line.split("\t");
     const ri = startRow + li;
-    if (!items[ri]) items[ri] = { name: "", unit: "ลัง", target: 0, rep: "" };
+    if (!items[ri]) items[ri] = { name: "", unit: "", target: 0, rep: "" };
     cells.forEach((val, ci) => {
       const key = cols[startCol + ci];
       if (!key) return;
@@ -783,7 +785,7 @@ $("#btnStartRound").addEventListener("click", () => {
     items: cleanItems.map((it, i) => ({
       id: "i" + (i + 1),
       name: it.name.trim(),
-      unit: (it.unit || "").trim() || "ชิ้น",
+      unit: (it.unit || "").trim(), // เว้นว่างได้ถ้ายังไม่ระบุ — พนักงานพิมพ์หน่วยเองตอนนับที่มือถือ
       target: it.target || 0,
       rep: (it.rep || "").trim(),
     })),
@@ -822,6 +824,14 @@ $("#btnStartRound").addEventListener("click", () => {
    ============================================================ */
 function resultsKey(code){ return "sc_results_" + code; }
 function resolvedKey(code){ return "sc_resolved_" + code; }
+function unitOverrideKey(code){ return "sc_unitoverride_" + code; } // { [itemId]: หน่วยที่เถ้าแก่แก้เองในขั้น 2 }
+
+// หน่วยที่ควรใช้จริงของสินค้าแต่ละชิ้น เรียงลำดับความสำคัญ: เถ้าแก่แก้เองในขั้น 2 > พนักงานพิมพ์ตอนนับที่มือถือ > ที่ตั้งไว้ตอนตั้งลิสต์
+function resolvedUnit(id, cd, originalUnit){
+  const overrides = activeRound ? (store.get(unitOverrideKey(activeRound.code)) || {}) : {};
+  const fromMobile = cd && cd.perItem[id] && cd.perItem[id].final ? cd.perItem[id].final.unit : "";
+  return overrides[id] || fromMobile || originalUnit || "";
+}
 
 function computeCountData(){
   if (!activeRound) return null;
@@ -832,20 +842,20 @@ function computeCountData(){
   job.items.forEach(it => { perItem[it.id] = { item: it, entries: [], final: null, conflict: false }; });
   Object.entries(submissions).forEach(([counter, res]) => {
     (res.counts || []).forEach(c => {
-      if (perItem[c.id]) perItem[c.id].entries.push({ counter, qty: c.qty, status: c.status, at: res.at, name: c.name || "" });
+      if (perItem[c.id]) perItem[c.id].entries.push({ counter, qty: c.qty, status: c.status, at: res.at, name: c.name || "", unit: c.unit || "" });
     });
   });
   Object.values(perItem).forEach(p => {
-    if (!p.entries.length){ p.final = { status: "skip", qty: null, name: "" }; return; }
+    if (!p.entries.length){ p.final = { status: "skip", qty: null, name: "", unit: "" }; return; }
     const uniq = new Set(p.entries.map(e => e.status + ":" + e.qty));
     if (uniq.size === 1){
-      p.final = { status: p.entries[0].status, qty: p.entries[0].qty, name: p.entries[0].name };
+      p.final = { status: p.entries[0].status, qty: p.entries[0].qty, name: p.entries[0].name, unit: p.entries[0].unit };
       return;
     }
     p.conflict = true;
     const chosenCounter = resolved[p.item.id];
     const chosen = chosenCounter ? p.entries.find(e => e.counter === chosenCounter) : null;
-    p.final = chosen ? { status: chosen.status, qty: chosen.qty, name: chosen.name } : null;
+    p.final = chosen ? { status: chosen.status, qty: chosen.qty, name: chosen.name, unit: chosen.unit } : null;
   });
   return { job, submissions, perItem };
 }
@@ -942,10 +952,15 @@ function renderStep2(){
       ? `${esc(correctedName)}<div class="nameNote">แก้จากมือถือ — เดิม: ${esc(it.name)}</div>`
       : esc(it.name);
 
+    const unitFromMobile = p.final && p.final.unit ? p.final.unit : "";
+
     tr.className = stClass;
     tr.innerHTML = `
       <td class="rName">${nameCell}${conflictHtml}</td>
-      <td>${esc(it.unit)}</td>
+      <td>
+        <select data-unit-id="${esc(it.id)}">${unitOptionsHtml(resolvedUnit(it.id, cd, it.unit))}</select>
+        ${unitFromMobile ? `<div class="nameNote">จากมือถือ: ${esc(unitFromMobile)}</div>` : ""}
+      </td>
       <td class="rQty">${it.target}</td>
       <td class="rQty">${qtyText}</td>
       <td>${tagHtml}</td>`;
@@ -953,6 +968,15 @@ function renderStep2(){
   });
 }
 renderStep2();
+
+$("#resultRows").addEventListener("change", e => {
+  const el = e.target;
+  if (!el.dataset.unitId || !activeRound) return;
+  const overrides = store.get(unitOverrideKey(activeRound.code)) || {};
+  if (el.value) overrides[el.dataset.unitId] = el.value;
+  else delete overrides[el.dataset.unitId];
+  store.set(unitOverrideKey(activeRound.code), overrides);
+});
 
 $("#resultRepSel").addEventListener("change", e => {
   resultRepFilter = e.target.value;
@@ -1037,7 +1061,7 @@ function renderStep3(){
   const rows = [];
   activeRound.job.items.forEach(it => {
     rows.push({
-      id: it.id, name: it.name, unit: it.unit, target: it.target, rep: it.rep || "",
+      id: it.id, name: it.name, unit: resolvedUnit(it.id, cd, it.unit), target: it.target, rep: it.rep || "",
       isExtra: false, countedLabel: countedLabel(cd.perItem[it.id]), plan: plan.items[it.id],
     });
   });
@@ -1226,7 +1250,7 @@ function buildExportItemsFromPlan(){
   activeRound.job.items.forEach(it => {
     const p = plan.items[it.id];
     if (!p || p.dropped || !(p.qty > 0)) return;
-    items.push({ id: it.id, name: nameMap[it.name] || it.name, originalName: it.name, qty: p.qty, unit: it.unit, rep: it.rep || "ไม่ระบุเซล", type: "item" });
+    items.push({ id: it.id, name: nameMap[it.name] || it.name, originalName: it.name, qty: p.qty, unit: resolvedUnit(it.id, cd, it.unit), rep: it.rep || "ไม่ระบุเซล", type: "item" });
   });
   plan.extra.forEach(ex => {
     if (ex.dropped || !(ex.qty > 0)) return;

@@ -125,7 +125,10 @@ input{font-family:inherit}
   font-weight:600;
 }
 .row input.qty:focus{border-color:var(--go)}
-.row .unit{font-size:14px;color:var(--ink-soft);min-width:36px}
+select.row-unit,.row select.unit{
+  font-size:14px;color:var(--ink);min-width:76px;min-height:44px;
+  border:1px solid var(--desk-edge);border-radius:var(--radius);background:#fff;padding:0 6px;
+}
 .row .btnNone{
   margin-left:auto;min-height:44px;padding:0 12px;border:1px solid var(--stamp);color:var(--stamp);
   background:#fff;border-radius:var(--radius);font-size:13px;font-weight:600;white-space:nowrap;
@@ -289,6 +292,7 @@ let counterName = "";       // ชื่อคนนับ
 let job = null;             // {v,code,branch,createdAt,items[]} ที่ได้จากคอม
 let counts = {};            // { itemId: {qty, status} }  status: skip | counted | none
 let nameOverrides = {};     // { itemId: "ชื่อที่แก้เอง" } — แก้ได้เฉพาะสำเนาบนมือถือ ไม่ย้อนกลับไปแก้ job เดิม
+let unitOverrides = {};     // { itemId: "หน่วยที่เลือกเอง" } — ใช้ตอนคอมไม่ได้ตั้งหน่วยไว้ หรือพนักงานอยากแก้เอง
 let filter = "all";         // ตัวกรองที่กำลังเลือก: all | skip | done
 let pendingSend = false;    // true = กดส่งไปแล้วแต่ยังไม่ได้ publish (ออฟไลน์)
 let lastSentAt = null;      // เวลาที่ส่งสำเร็จล่าสุด (แสดงในหน้าส่งแล้ว)
@@ -360,7 +364,7 @@ function draftKey(c){ return "sc_draft_" + c; }
 function saveDraft(){
   if (!code) return;
   store.set(draftKey(code), {
-    code, counter: counterName, job, counts, nameOverrides,
+    code, counter: counterName, job, counts, nameOverrides, unitOverrides,
     pendingSend, lastSentAt, updatedAt: Date.now(),
   });
   store.set("sc_last_code", code);
@@ -405,6 +409,7 @@ function resumeDraft(draft){
   job = draft.job;
   counts = draft.counts || {};
   nameOverrides = draft.nameOverrides || {};
+  unitOverrides = draft.unitOverrides || {};
   pendingSend = !!draft.pendingSend;
   lastSentAt = draft.lastSentAt || null;
   $("#inCode").value = code;
@@ -449,6 +454,7 @@ $("#btnJoin").addEventListener("click", () => {
   const sameCounter = existing && existing.counter === counterName;
   counts = sameCounter ? (existing.counts || {}) : {};
   nameOverrides = sameCounter ? (existing.nameOverrides || {}) : {};
+  unitOverrides = sameCounter ? (existing.unitOverrides || {}) : {};
   job = null;
   pendingSend = false;
   lastSentAt = null;
@@ -509,7 +515,7 @@ function renderRows(){
       <div class="name" contenteditable inputmode="text" data-id="${it.id}">${esc(nameOverrides[it.id] || it.name)}</div>
       <div class="ctrl">
         <input class="qty" type="text" inputmode="numeric" data-id="${it.id}" value="${c.qty ?? ""}" placeholder="0">
-        <span class="unit">${esc(it.unit)}</span>
+        <select class="unit" data-id="${it.id}">${unitOptionsHtml(unitOverrides[it.id] || it.unit)}</select>
         <button class="btnNone" data-id="${it.id}">${c.status === "none" ? "ของหมด ✓" : "ไม่มีของ"}</button>
       </div>`;
     rowsEl.appendChild(row);
@@ -525,6 +531,15 @@ function renderRows(){
   }
 }
 const esc = s => String(s ?? "").replace(/[&<>]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" }[c]));
+
+// หน่วยนับที่เลือกได้ — ถ้าคอมไม่ได้ตั้งหน่วยไว้ ให้พนักงานเลือก/พิมพ์เองตอนนับ
+const UNITS = ["ชิ้น", "แพ็ค", "ลัง"];
+function unitOptionsHtml(current){
+  const cur = current || "";
+  const list = cur && !UNITS.includes(cur) ? [cur, ...UNITS] : UNITS;
+  return `<option value=""${cur ? "" : " selected"}>— เลือกหน่วย —</option>` +
+    list.map(u => `<option value="${esc(u)}"${u === cur ? " selected" : ""}>${esc(u)}</option>`).join("");
+}
 
 /* กดปุ่มกรอง */
 document.querySelectorAll(".filt").forEach(b => {
@@ -565,6 +580,16 @@ $("#rows").addEventListener("input", e => {
     return;
   }
 });
+$("#rows").addEventListener("change", e => {
+  const el = e.target;
+  if (!el.classList.contains("unit")) return;
+  // เลือก/แก้หน่วยนับเอง — ส่งหน่วยที่เลือกไปให้คอมเห็นตอนส่งผลด้วย
+  const id = el.dataset.id;
+  const original = (job.items.find(it => it.id === id) || {}).unit || "";
+  if (el.value && el.value !== original) unitOverrides[id] = el.value;
+  else delete unitOverrides[id];
+  saveDraft();
+});
 /* ปุ่มไม่มีของ */
 $("#rows").addEventListener("click", e => {
   const b = e.target.closest(".btnNone");
@@ -593,6 +618,7 @@ function buildResult(){
       const c = counts[it.id] || { qty: null, status: "skip" };
       const entry = { id: it.id, qty: c.qty ?? 0, status: c.status };
       if (nameOverrides[it.id]) entry.name = nameOverrides[it.id]; // ชื่อที่แก้เอง — ส่งไปให้คอมเห็น ไม่แตะชื่อเดิมใน job
+      if (unitOverrides[it.id]) entry.unit = unitOverrides[it.id]; // หน่วยที่เลือก/แก้เอง — ส่งไปให้คอมเห็น
       return entry;
     }),
   };
