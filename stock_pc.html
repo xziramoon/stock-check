@@ -1446,7 +1446,8 @@ $("#btnCopyS").addEventListener("click", async () => {
 });
 $("#btnPrintS").addEventListener("click", () => window.print());
 
-// บันทึกเป็นรูป กว้าง 1080px พื้นขาว — ถ้าเกิน 20 รายการตัดเป็นหลายรูป (ไม่รวมคอลัมน์นับได้/ยอดเป้าอยู่แล้ว)
+// บันทึกเป็นรูป JPG กว้าง 1080px พื้นขาว — ถ้าเกิน 20 รายการตัดเป็นหลายรูป (ไม่รวมคอลัมน์นับได้/ยอดเป้าอยู่แล้ว)
+// ดาวน์โหลดตรงเข้าเครื่องเลย ไม่เด้งหน้าต่างแชร์ของระบบ (ผู้ใช้เป็นคอมตั้งโต๊ะ อยากได้ไฟล์ตรง ๆ ไม่ใช่เมนูแชร์)
 async function exportImages(){
   const items = exportDraft.items.filter(it => it.type === "item" && it.rep === repFilter && it.qty > 0);
   if (!items.length){ toast("ไม่มีรายการที่จะบันทึกเป็นรูป"); return; }
@@ -1469,8 +1470,8 @@ async function exportImages(){
         : `รวม ${chunks[ci].length} รายการ`;
       await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
       const canvas = await html2canvas(sheet, { scale: Math.max(2, 1080 / sheet.offsetWidth), backgroundColor: "#fffdf8", useCORS: true });
-      const blob = await new Promise(r => canvas.toBlob(r, "image/png"));
-      files.push(new File([blob], `ใบส่งเซล-${repFilter}-${ci + 1}.png`, { type: "image/png" }));
+      const blob = await new Promise(r => canvas.toBlob(r, "image/jpeg", 0.95));
+      files.push(new File([blob], `ใบส่งเซล-${repFilter}-${ci + 1}.jpg`, { type: "image/jpeg" }));
     }
   } catch(err){
     toast("สร้างรูปไม่สำเร็จ ลองใหม่อีกครั้ง");
@@ -1481,9 +1482,6 @@ async function exportImages(){
   }
   if (!files.length) return;
 
-  if (navigator.canShare && navigator.canShare({ files })){
-    try { await navigator.share({ files, title: "ใบส่งเซล" }); return; } catch(e){ /* ผู้ใช้ยกเลิก หรือแชร์ไม่ได้ — ใช้ดาวน์โหลดแทน */ }
-  }
   files.forEach(f => {
     const a = document.createElement("a");
     a.href = URL.createObjectURL(f); a.download = f.name; a.click();
