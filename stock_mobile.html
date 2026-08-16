@@ -125,10 +125,11 @@ input{font-family:inherit}
   font-weight:600;
 }
 .row input.qty:focus{border-color:var(--go)}
-select.row-unit,.row select.unit{
-  font-size:14px;color:var(--ink);min-width:76px;min-height:44px;
+.row input.unit{
+  width:76px;height:44px;font-size:14px;color:var(--ink);text-align:center;
   border:1px solid var(--desk-edge);border-radius:var(--radius);background:#fff;padding:0 6px;
 }
+.row input.unit:focus{border-color:var(--go)}
 .row .btnNone{
   margin-left:auto;min-height:44px;padding:0 12px;border:1px solid var(--stamp);color:var(--stamp);
   background:#fff;border-radius:var(--radius);font-size:13px;font-weight:600;white-space:nowrap;
@@ -248,6 +249,13 @@ select.row-unit,.row select.unit{
   </section>
 
 </div>
+
+<!-- คำแนะนำหน่วยนับ — พิมพ์เองได้เต็มที่ นี่แค่ตัวช่วยแตะเร็ว ๆ -->
+<datalist id="unitList">
+  <option value="ชิ้น">
+  <option value="แพ็ค">
+  <option value="ลัง">
+</datalist>
 
 <!-- โมดัลถามว่ามี draft ค้างอยู่ ทำต่อไหม -->
 <div class="modalWrap" id="resumeModal" hidden>
@@ -515,7 +523,7 @@ function renderRows(){
       <div class="name" contenteditable inputmode="text" data-id="${it.id}">${esc(nameOverrides[it.id] || it.name)}</div>
       <div class="ctrl">
         <input class="qty" type="text" inputmode="numeric" data-id="${it.id}" value="${c.qty ?? ""}" placeholder="0">
-        <select class="unit" data-id="${it.id}">${unitOptionsHtml(unitOverrides[it.id] || it.unit)}</select>
+        <input class="unit" type="text" inputmode="text" list="unitList" data-id="${it.id}" value="${esc(unitOverrides[it.id] || it.unit)}" placeholder="หน่วย">
         <button class="btnNone" data-id="${it.id}">${c.status === "none" ? "ของหมด ✓" : "ไม่มีของ"}</button>
       </div>`;
     rowsEl.appendChild(row);
@@ -532,14 +540,6 @@ function renderRows(){
 }
 const esc = s => String(s ?? "").replace(/[&<>]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" }[c]));
 
-// หน่วยนับที่เลือกได้ — ถ้าคอมไม่ได้ตั้งหน่วยไว้ ให้พนักงานเลือก/พิมพ์เองตอนนับ
-const UNITS = ["ชิ้น", "แพ็ค", "ลัง"];
-function unitOptionsHtml(current){
-  const cur = current || "";
-  const list = cur && !UNITS.includes(cur) ? [cur, ...UNITS] : UNITS;
-  return `<option value=""${cur ? "" : " selected"}>— เลือกหน่วย —</option>` +
-    list.map(u => `<option value="${esc(u)}"${u === cur ? " selected" : ""}>${esc(u)}</option>`).join("");
-}
 
 /* กดปุ่มกรอง */
 document.querySelectorAll(".filt").forEach(b => {
@@ -551,9 +551,9 @@ document.querySelectorAll(".filt").forEach(b => {
   });
 });
 
-/* พิมพ์จำนวน — เซฟทุกครั้งที่พิมพ์, เลือกข้อความเดิมทั้งหมดเมื่อแตะ */
+/* พิมพ์จำนวน/หน่วย — เซฟทุกครั้งที่พิมพ์, เลือกข้อความเดิมทั้งหมดเมื่อแตะ */
 $("#rows").addEventListener("focusin", e => {
-  if (e.target.classList.contains("qty")) e.target.select();
+  if (e.target.classList.contains("qty") || e.target.classList.contains("unit")) e.target.select();
 });
 $("#rows").addEventListener("input", e => {
   const el = e.target;
@@ -579,23 +579,28 @@ $("#rows").addEventListener("input", e => {
     saveDraft();
     return;
   }
-});
-$("#rows").addEventListener("change", e => {
-  const el = e.target;
-  if (!el.classList.contains("unit")) return;
-  // เลือก/แก้หน่วยนับเอง — ส่งหน่วยที่เลือกไปให้คอมเห็นตอนส่งผลด้วย
-  const id = el.dataset.id;
-  const original = (job.items.find(it => it.id === id) || {}).unit || "";
-  if (el.value && el.value !== original) unitOverrides[id] = el.value;
-  else delete unitOverrides[id];
-  saveDraft();
+  if (el.classList.contains("unit")){
+    // พิมพ์หน่วยนับเอง (มีคำแนะนำให้แตะเร็ว ๆ ผ่าน datalist แต่พิมพ์เองได้เต็มที่) — ส่งไปให้คอมเห็นตอนส่งผล
+    const id = el.dataset.id;
+    const text = el.value.trim();
+    const original = (job.items.find(it => it.id === id) || {}).unit || "";
+    if (text && text !== original) unitOverrides[id] = text;
+    else delete unitOverrides[id];
+    saveDraft();
+    return;
+  }
 });
 /* ปุ่มไม่มีของ */
 $("#rows").addEventListener("click", e => {
   const b = e.target.closest(".btnNone");
   if (!b) return;
   const id = b.dataset.id;
-  counts[id] = { qty: 0, status: "none" };
+  const cur = counts[id];
+  if (cur && cur.status === "none"){
+    counts[id] = { qty: null, status: "skip" }; // กดซ้ำ = ยกเลิก "ของหมด" กลับไปนับใหม่ได้
+  } else {
+    counts[id] = { qty: 0, status: "none" };
+  }
   saveDraft();
   renderRows();
 });
