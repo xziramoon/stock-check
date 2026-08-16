@@ -112,7 +112,12 @@ input{font-family:inherit}
 .row{padding:12px 12px;border-bottom:1px solid var(--rule)}
 .row:last-child{border-bottom:0}
 .row.st-none{background:rgba(180,48,42,.08)}
-.row .name{font-size:17px;font-weight:500;margin-bottom:9px;word-break:break-word}
+.row .name{
+  font-size:17px;font-weight:500;margin-bottom:9px;word-break:break-word;
+  border-bottom:1px dashed var(--desk-edge);padding:4px 2px;margin-left:-2px;margin-right:-2px;border-radius:2px;
+}
+.row .name:focus{outline:none;background:rgba(31,111,92,.1);border-bottom-style:solid;border-bottom-color:var(--go)}
+.row .name::after{content:" ✎";font-size:12px;color:var(--ink-soft);opacity:.55}
 .row .ctrl{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
 .row input.qty{
   width:84px;height:48px;font-size:20px;text-align:center;font-family:"IBM Plex Mono",monospace;
@@ -283,6 +288,7 @@ let code = "";              // รหัสรอบปัจจุบัน
 let counterName = "";       // ชื่อคนนับ
 let job = null;             // {v,code,branch,createdAt,items[]} ที่ได้จากคอม
 let counts = {};            // { itemId: {qty, status} }  status: skip | counted | none
+let nameOverrides = {};     // { itemId: "ชื่อที่แก้เอง" } — แก้ได้เฉพาะสำเนาบนมือถือ ไม่ย้อนกลับไปแก้ job เดิม
 let filter = "all";         // ตัวกรองที่กำลังเลือก: all | skip | done
 let pendingSend = false;    // true = กดส่งไปแล้วแต่ยังไม่ได้ publish (ออฟไลน์)
 let lastSentAt = null;      // เวลาที่ส่งสำเร็จล่าสุด (แสดงในหน้าส่งแล้ว)
@@ -354,7 +360,7 @@ function draftKey(c){ return "sc_draft_" + c; }
 function saveDraft(){
   if (!code) return;
   store.set(draftKey(code), {
-    code, counter: counterName, job, counts,
+    code, counter: counterName, job, counts, nameOverrides,
     pendingSend, lastSentAt, updatedAt: Date.now(),
   });
   store.set("sc_last_code", code);
@@ -398,6 +404,7 @@ function resumeDraft(draft){
   counterName = draft.counter;
   job = draft.job;
   counts = draft.counts || {};
+  nameOverrides = draft.nameOverrides || {};
   pendingSend = !!draft.pendingSend;
   lastSentAt = draft.lastSentAt || null;
   $("#inCode").value = code;
@@ -439,7 +446,9 @@ $("#btnJoin").addEventListener("click", () => {
 
   // ถ้ามี draft เดิมของรหัสนี้อยู่แล้ว (เช่นเคยนับค้างไว้) ให้กู้คืนจำนวนที่กรอกไว้
   const existing = loadDraft(code);
-  counts = (existing && existing.counter === counterName) ? (existing.counts || {}) : {};
+  const sameCounter = existing && existing.counter === counterName;
+  counts = sameCounter ? (existing.counts || {}) : {};
+  nameOverrides = sameCounter ? (existing.nameOverrides || {}) : {};
   job = null;
   pendingSend = false;
   lastSentAt = null;
@@ -497,7 +506,7 @@ function renderRows(){
     row.className = "row" + (c.status === "none" ? " st-none" : "");
     row.dataset.id = it.id;
     row.innerHTML = `
-      <div class="name">${esc(it.name)}</div>
+      <div class="name" contenteditable inputmode="text" data-id="${it.id}">${esc(nameOverrides[it.id] || it.name)}</div>
       <div class="ctrl">
         <input class="qty" type="text" inputmode="numeric" data-id="${it.id}" value="${c.qty ?? ""}" placeholder="0">
         <span class="unit">${esc(it.unit)}</span>
@@ -533,16 +542,28 @@ $("#rows").addEventListener("focusin", e => {
 });
 $("#rows").addEventListener("input", e => {
   const el = e.target;
-  if (!el.classList.contains("qty")) return;
-  el.value = el.value.replace(/[^\d]/g, "");
-  const id = el.dataset.id;
-  if (el.value === ""){
-    counts[id] = { qty: null, status: "skip" };
-  } else {
-    counts[id] = { qty: parseInt(el.value, 10), status: "counted" };
+  if (el.classList.contains("qty")){
+    el.value = el.value.replace(/[^\d]/g, "");
+    const id = el.dataset.id;
+    if (el.value === ""){
+      counts[id] = { qty: null, status: "skip" };
+    } else {
+      counts[id] = { qty: parseInt(el.value, 10), status: "counted" };
+    }
+    saveDraft();
+    updateProgressOnly();
+    return;
   }
-  saveDraft();
-  updateProgressOnly();
+  if (el.classList.contains("name")){
+    // แก้ชื่อสินค้าที่ผิด/ไม่ตรงตอนนับ — แก้แค่สำเนาบนมือถือ ไม่เขียนย้อนกลับ job เดิม แต่ส่งชื่อที่แก้ไปให้คอมเห็นตอนส่งผล
+    const id = el.dataset.id;
+    const text = el.textContent.trim();
+    const original = (job.items.find(it => it.id === id) || {}).name || "";
+    if (text && text !== original) nameOverrides[id] = text;
+    else delete nameOverrides[id];
+    saveDraft();
+    return;
+  }
 });
 /* ปุ่มไม่มีของ */
 $("#rows").addEventListener("click", e => {
@@ -570,7 +591,9 @@ function buildResult(){
     at: Date.now(),
     counts: job.items.map(it => {
       const c = counts[it.id] || { qty: null, status: "skip" };
-      return { id: it.id, qty: c.qty ?? 0, status: c.status };
+      const entry = { id: it.id, qty: c.qty ?? 0, status: c.status };
+      if (nameOverrides[it.id]) entry.name = nameOverrides[it.id]; // ชื่อที่แก้เอง — ส่งไปให้คอมเห็น ไม่แตะชื่อเดิมใน job
+      return entry;
     }),
   };
 }
