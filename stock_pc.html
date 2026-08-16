@@ -1238,12 +1238,15 @@ function buildExportItemsFromPlan(){
 function initExportDraft(force){
   if (!activeRound) return;
   const saved = force ? null : store.get(exportKey(activeRound.code));
-  if (saved){
+  const freshItems = buildExportItemsFromPlan();
+  // ถ้า draft เดิมที่เคยเซฟไว้ "ว่างเปล่า" (เช่นเข้าขั้นนี้ตอนยังวางแผนไม่เสร็จ ตอนนั้นยังไม่มีของจะสั่งเลย)
+  // แต่ตอนนี้วางแผนแล้วมีของจะสั่งจริง ให้สร้างใหม่จากแผนปัจจุบัน ไม่งั้นจะติดค้างว่างตลอดไป
+  if (saved && (saved.items.length > 0 || freshItems.length === 0)){
     exportDraft = saved;
   } else {
     exportDraft = {
-      head: { shop: shopName, branch: activeRound.job.branch, date: thaiDateS(), rep: "", note: "" },
-      items: buildExportItemsFromPlan(),
+      head: saved ? saved.head : { shop: shopName, branch: activeRound.job.branch, date: thaiDateS(), rep: "", note: "" },
+      items: freshItems,
     };
     store.set(exportKey(activeRound.code), exportDraft);
   }
