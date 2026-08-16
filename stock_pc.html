@@ -404,7 +404,17 @@ body.capturingS .sTools,body.capturingS .sheetAddrow{display:none!important}
       <div class="card">
         <h3>ผลการนับ — รหัสรอบ <span id="resultCode" style="font-family:'IBM Plex Mono',monospace"></span></h3>
         <div class="body">
-          <table class="resultTable">
+          <div class="repSelectRow">
+            <label class="field">
+              <span>เลือกเซลที่จะดู</span>
+              <select id="resultRepSel"><option value="">— เลือกเซล —</option></select>
+            </label>
+          </div>
+          <div id="result2Empty" class="notReady">
+            <div class="big">เลือกเซลด้านบนก่อน</div>
+            เพื่อดูรายการผลนับของเซลนั้น ๆ
+          </div>
+          <table class="resultTable" id="resultTableEl" hidden>
             <thead>
               <tr>
                 <th>สินค้า</th>
@@ -429,7 +439,17 @@ body.capturingS .sTools,body.capturingS .sheetAddrow{display:none!important}
     </div>
     <div id="panel3Content" hidden>
       <div class="planTopBar" id="planTopBar"></div>
-      <div class="planControls">
+      <div class="repSelectRow">
+        <label class="field">
+          <span>เลือกเซลที่จะวางแผน</span>
+          <select id="planRepSel"><option value="">— เลือกเซล —</option></select>
+        </label>
+      </div>
+      <div id="plan3Empty" class="notReady">
+        <div class="big">เลือกเซลด้านบนก่อน</div>
+        เพื่อวางแผนสั่งของของเซลนั้น ๆ
+      </div>
+      <div class="planControls" id="planControlsRow" hidden>
         <button class="btn ghost sm" id="btnHideOk">ซ่อนของที่ยังพอ</button>
         <button class="btn ghost sm" id="btnAddExtra">+ เพิ่มรายการนอกลิสต์</button>
         <button class="btn ghost sm" id="btnResetStep3">คืนค่าเดิม</button>
@@ -830,6 +850,8 @@ function computeCountData(){
   return { job, submissions, perItem };
 }
 
+let resultRepFilter = ""; // เซลที่เลือกดูอยู่ในขั้น 2 — ว่าง = ยังไม่เลือก ตารางไม่โผล่
+
 function renderStep2(){
   if (!activeRound){
     $("#noRoundNotice").hidden = false;
@@ -841,6 +863,14 @@ function renderStep2(){
   $("#resultCode").textContent = activeRound.code;
 
   const cd = computeCountData();
+
+  // ตัวเลือกเซล
+  const repsInJob = [...new Set(cd.job.items.map(it => it.rep || "ไม่ระบุเซล"))].sort((a, b) => a.localeCompare(b, "th"));
+  const repSel = $("#resultRepSel");
+  repSel.innerHTML = `<option value="">— เลือกเซล —</option><option value="__ALL__">ทั้งหมด (${cd.job.items.length} รายการ)</option>` +
+    repsInJob.map(r => `<option value="${esc(r)}">${esc(r)}</option>`).join("");
+  repSel.value = resultRepFilter;
+
   let cCounted = 0, cNone = 0, cSkip = 0, cConflict = 0;
   Object.values(cd.perItem).forEach(p => {
     if (p.conflict && !p.final) cConflict++;
@@ -862,10 +892,22 @@ function renderStep2(){
       }).join("")
     : `<span class="noSub">ยังไม่มีใครส่งผลเข้ามา</span>`;
 
-  // ตารางผล
+  // ตารางผล — โผล่ก็ต่อเมื่อเลือกเซลแล้วเท่านั้น กันหน้าดูรกตอนมีของเป็นร้อยรายการ
+  if (!resultRepFilter){
+    $("#result2Empty").hidden = false;
+    $("#resultTableEl").hidden = true;
+    return;
+  }
+  $("#result2Empty").hidden = true;
+  $("#resultTableEl").hidden = false;
+
+  const itemsToShow = resultRepFilter === "__ALL__"
+    ? cd.job.items
+    : cd.job.items.filter(it => (it.rep || "ไม่ระบุเซล") === resultRepFilter);
+
   const tb = $("#resultRows");
   tb.innerHTML = "";
-  cd.job.items.forEach(it => {
+  itemsToShow.forEach(it => {
     const p = cd.perItem[it.id];
     const tr = document.createElement("tr");
     tr.dataset.id = it.id;
@@ -912,6 +954,11 @@ function renderStep2(){
 }
 renderStep2();
 
+$("#resultRepSel").addEventListener("change", e => {
+  resultRepFilter = e.target.value;
+  renderStep2();
+});
+
 $("#resultRows").addEventListener("click", e => {
   const b = e.target.closest("button[data-pick]"); if (!b) return;
   const resolved = store.get(resolvedKey(activeRound.code)) || {};
@@ -943,6 +990,7 @@ function flashUpdatedRows(ids){
 function planKey(code){ return "sc_plan_" + code; }
 let hideOk = false;          // ปุ่ม "ซ่อนของที่ยังพอ"
 let collapsedGroups = {};    // พับ/กางกลุ่มเซล (อยู่ในหน่วยความจำหน้านี้พอ ไม่ต้องจำถาวร)
+let planRepFilter = "";      // เซลที่เลือกวางแผนอยู่ — ว่าง = ยังไม่เลือก ลิสต์ไม่โผล่
 
 function loadPlan(){
   if (!activeRound) return null;
@@ -1007,9 +1055,26 @@ function renderStep3(){
     return a.localeCompare(b, "th");
   });
 
+  // ตัวเลือกเซล
+  const planSel = $("#planRepSel");
+  planSel.innerHTML = `<option value="">— เลือกเซล —</option><option value="__ALL__">ทั้งหมด (${rows.length} รายการ)</option>` +
+    repNames.map(r => `<option value="${esc(r)}">${esc(r)}</option>`).join("");
+  planSel.value = planRepFilter;
+
+  // ลิสต์รายการโผล่ก็ต่อเมื่อเลือกเซลแล้วเท่านั้น กันหน้ารกตอนมีของเป็นร้อยรายการ
+  if (!planRepFilter){
+    $("#plan3Empty").hidden = false;
+    $("#planControlsRow").hidden = true;
+    $("#planGroups").innerHTML = "";
+    return;
+  }
+  $("#plan3Empty").hidden = true;
+  $("#planControlsRow").hidden = false;
+
+  const repsToShow = planRepFilter === "__ALL__" ? repNames : [planRepFilter];
   const wrap = $("#planGroups");
   wrap.innerHTML = "";
-  repNames.forEach(rep => {
+  repsToShow.forEach(rep => {
     let list = groups[rep];
     if (hideOk) list = list.filter(r => r.plan.dropped || r.plan.qty > 0);
     if (!list.length) return;
@@ -1109,6 +1174,10 @@ $("#planGroups").addEventListener("change", e => {
 $("#planGroups").addEventListener("focusout", e => {
   if (e.target.classList.contains("orderQty") || e.target.dataset.k === "name") renderStep3();
 });
+$("#planRepSel").addEventListener("change", e => {
+  planRepFilter = e.target.value;
+  renderStep3();
+});
 $("#btnHideOk").addEventListener("click", () => {
   hideOk = !hideOk;
   $("#btnHideOk").textContent = hideOk ? "แสดงทั้งหมด" : "ซ่อนของที่ยังพอ";
@@ -1116,7 +1185,9 @@ $("#btnHideOk").addEventListener("click", () => {
 });
 $("#btnAddExtra").addEventListener("click", () => {
   const plan = loadPlan(); if (!plan) return;
-  plan.extra.push({ id: "x" + Date.now(), name: "สินค้าใหม่ (นอกลิสต์)", unit: "ชิ้น", qty: 1, rep: "", dropped: false, touched: true });
+  // ถ้ากำลังดูเซลใดเซลหนึ่งอยู่ ให้รายการใหม่เข้าเซลนั้นเลย จะได้ไม่หายไปจากสายตา
+  const defaultRep = (planRepFilter && planRepFilter !== "__ALL__") ? planRepFilter : "";
+  plan.extra.push({ id: "x" + Date.now(), name: "สินค้าใหม่ (นอกลิสต์)", unit: "ชิ้น", qty: 1, rep: defaultRep, dropped: false, touched: true });
   savePlan(plan); renderStep3();
   toast("เพิ่มรายการนอกลิสต์แล้ว — แก้ชื่อ/เซล/จำนวนได้เลย");
 });
