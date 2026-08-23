@@ -165,7 +165,11 @@ td select:focus{outline:none;background:rgba(31,111,92,.13)}
 .subChip{
   background:#fff;border:1px solid var(--desk-edge);border-radius:var(--radius);
   padding:6px 10px;font-size:13px;display:flex;gap:8px;align-items:center;
+  cursor:pointer;
 }
+.subChip:hover{border-color:var(--go);}
+.subChip.on{background:var(--go);border-color:var(--go);color:#fff;}
+.subChip.on .t{color:rgba(255,255,255,.85);}
 .subChip .t{color:var(--ink-soft);font-family:"IBM Plex Mono",monospace;font-size:12px}
 .noSub{color:var(--ink-soft);font-size:13.5px}
 
@@ -842,6 +846,7 @@ $("#btnStartRound").addEventListener("click", () => {
   // ล้างผลของรอบก่อนหน้า (รหัสใหม่ ผลใหม่) และล้างสำเนาในหน่วยความจำของขั้นถัดไปที่ผูกกับรอบเดิม
   store.set(resultsKey(code), {});
   store.set(resolvedKey(code), {});
+  restoreResultFilter(); // รอบใหม่ยังไม่เคยเลือกดูอะไร — เคลียร์ตัวกรองขั้น 2 ของรอบก่อนทิ้ง
   exportDraft = null;
   repFilter = "";
 
@@ -907,7 +912,23 @@ function computeCountData(){
   return { job, submissions, perItem };
 }
 
-let resultRepFilter = ""; // เซลที่เลือกดูอยู่ในขั้น 2 — ว่าง = ยังไม่เลือก ตารางไม่โผล่
+// ตัวกรองตารางผลของขั้น 2 — จำไว้ต่อรอบ (localStorage) กัน F5 แล้วตารางที่กำลังดูอยู่หายไปเงียบ ๆ
+function resultFilterKey(code){ return "sc_result_filter_" + code; }
+let resultRepFilter = "";  // เซลที่เลือกดูอยู่ — ว่าง = ยังไม่เลือก ตารางไม่โผล่ (ถ้า resultShowAll ไม่ได้ตั้งไว้)
+let resultShowAll = false; // true = กำลังดูทั้งหมด (มาจากการคลิกชื่อผู้ส่งผล) ข้ามการกรองบริษัท
+let resultCounterHighlight = ""; // ชื่อผู้ส่งผลที่เพิ่งคลิก — ไว้ไฮไลต์ชิปที่เลือกอยู่เฉย ๆ
+
+function restoreResultFilter(){
+  const saved = activeRound ? (store.get(resultFilterKey(activeRound.code)) || null) : null;
+  resultRepFilter = saved ? (saved.rep || "") : "";
+  resultShowAll = saved ? !!saved.all : false;
+  resultCounterHighlight = saved ? (saved.counter || "") : "";
+}
+function saveResultFilter(){
+  if (!activeRound) return;
+  store.set(resultFilterKey(activeRound.code), { rep: resultRepFilter, all: resultShowAll, counter: resultCounterHighlight });
+}
+restoreResultFilter();
 
 function renderStep2(){
   if (!activeRound){
@@ -941,18 +962,20 @@ function renderStep2(){
   $("#statConflict").textContent = cConflict;
 
   // ใครส่งมาแล้วบ้าง วันที่-เวลาไหน (ไม่ใช่แค่เวลา กันสับสนเวลาดูย้อนหลังข้ามวัน)
+  // คลิกที่ชื่อได้เลย — ข้ามดรอปดาว "เลือกบริษัท" ไปดูรายการทั้งหมดทันที
   const subEntries = Object.values(cd.submissions).sort((a, b) => b.at - a.at);
   $("#submitters").innerHTML = subEntries.length
     ? subEntries.map(s => {
         const dt = new Date(s.at);
         const d = dt.toLocaleDateString("th-TH", { day: "numeric", month: "short", year: "2-digit" });
         const t = dt.toLocaleTimeString("th-TH", { hour: "2-digit", minute: "2-digit" });
-        return `<span class="subChip">${esc(s.counter)} <span class="t">${d} · ${t}</span></span>`;
+        const on = resultShowAll && resultCounterHighlight === s.counter ? " on" : "";
+        return `<span class="subChip${on}" data-counter="${esc(s.counter)}">${esc(s.counter)} <span class="t">${d} · ${t}</span></span>`;
       }).join("")
     : `<span class="noSub">ยังไม่มีใครส่งผลเข้ามา</span>`;
 
-  // ตารางผล — โผล่ก็ต่อเมื่อเลือกเซลแล้วเท่านั้น กันหน้าดูรกตอนมีของเป็นร้อยรายการ
-  if (!resultRepFilter){
+  // ตารางผล — โผล่ก็ต่อเมื่อเลือกบริษัทแล้ว หรือกำลังดูทั้งหมด (จากคลิกชื่อผู้ส่งผล)
+  if (!resultRepFilter && !resultShowAll){
     $("#result2Empty").hidden = false;
     $("#resultTableEl").hidden = true;
     return;
@@ -960,7 +983,9 @@ function renderStep2(){
   $("#result2Empty").hidden = true;
   $("#resultTableEl").hidden = false;
 
-  const itemsToShow = cd.job.items.filter(it => (it.rep || "ไม่ระบุบริษัท") === resultRepFilter);
+  const itemsToShow = resultShowAll
+    ? cd.job.items
+    : cd.job.items.filter(it => (it.rep || "ไม่ระบุบริษัท") === resultRepFilter);
 
   const tb = $("#resultRows");
   tb.innerHTML = "";
@@ -1027,6 +1052,19 @@ $("#resultRows").addEventListener("change", e => {
 
 $("#resultRepSel").addEventListener("change", e => {
   resultRepFilter = e.target.value;
+  resultShowAll = false;
+  resultCounterHighlight = "";
+  saveResultFilter();
+  renderStep2();
+});
+
+// คลิกชื่อผู้ส่งผล — ข้ามดรอปดาว "เลือกบริษัท" ไปดูรายการทั้งหมดทันที
+$("#submitters").addEventListener("click", e => {
+  const chip = e.target.closest(".subChip[data-counter]"); if (!chip) return;
+  resultShowAll = true;
+  resultRepFilter = "";
+  resultCounterHighlight = chip.dataset.counter;
+  saveResultFilter();
   renderStep2();
 });
 
@@ -1553,6 +1591,7 @@ function updateTabBadge(){
 }
 function switchTab(n){
   currentTab = n;
+  store.set("sc_current_tab", n); // จำแท็บที่เปิดอยู่ไว้ — กด F5 แล้วกลับมาแท็บเดิม ไม่ต้องเดินทางใหม่
   document.querySelectorAll(".tab").forEach(t => t.classList.toggle("on", t.dataset.tab === n));
   document.querySelectorAll(".panel").forEach(p => p.classList.toggle("on", p.id === "panel" + n));
   if (n === "2"){ renderStep2(); unseenResults = 0; updateTabBadge(); }
@@ -1563,6 +1602,11 @@ $("#tabs").addEventListener("click", e => {
   const b = e.target.closest(".tab"); if (!b) return;
   switchTab(b.dataset.tab);
 });
+// เปิดกลับมาที่แท็บเดิมที่ค้างไว้ก่อน F5/ปิดเบราว์เซอร์ (ถ้ามีรอบนับอยู่แล้วเท่านั้น — ไม่งั้นเริ่มที่ "ตั้งลิสต์" ตามปกติ)
+{
+  const savedTab = store.get("sc_current_tab");
+  if (savedTab && savedTab !== "1" && activeRound) switchTab(savedTab);
+}
 </script>
 </body>
 </html>
