@@ -14,6 +14,7 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Bai+Jamjuree:wght@500;600;700&family=Sarabun:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500;600&display=swap" rel="stylesheet">
 <script src="https://unpkg.com/mqtt@5/dist/mqtt.min.js"></script>
+<script src="https://unpkg.com/jsqr@1.4.0/dist/jsQR.js"></script>
 <style>
 :root{
   --ink:#16232e;
@@ -174,6 +175,10 @@ input{font-family:inherit}
 .modalCard p{margin:0 0 16px;font-size:15px}
 .modalBtns{display:flex;gap:10px}
 .modalBtns .btn{margin-top:0}
+.scanBtn{margin-top:-6px;margin-bottom:14px}
+.scanCard{max-width:400px;text-align:center}
+#scanVideo{width:100%;aspect-ratio:1/1;object-fit:cover;background:#000;border-radius:var(--radius)}
+.scanMsg{color:var(--stamp);font-size:13.5px;margin:10px 0 0}
 
 .toast{
   position:fixed;left:50%;bottom:20px;transform:translateX(-50%) translateY(16px);
@@ -206,6 +211,7 @@ input{font-family:inherit}
         <span>รหัสรอบ (4 หลัก)</span>
         <input id="inCode" type="text" inputmode="numeric" maxlength="4" placeholder="0000" autocomplete="off">
       </label>
+      <button id="btnScanQr" type="button" class="btn ghost scanBtn">📷 สแกน QR แทนการพิมพ์รหัส</button>
       <label class="field">
         <span>ชื่อคนนับ</span>
         <input id="inName" type="text" placeholder="เช่น แนน" autocomplete="off">
@@ -265,6 +271,16 @@ input{font-family:inherit}
   <option value="แพ็ค">
   <option value="ลัง">
 </datalist>
+
+<!-- โมดัลกล้องสแกน QR ในตัวแอปเลย ไม่ต้องออกไปใช้แอปกล้องแยก -->
+<div class="modalWrap" id="scanModal" hidden>
+  <div class="modalCard scanCard">
+    <p>ส่องกล้องไปที่ QR บนจอคอม</p>
+    <video id="scanVideo" playsinline autoplay muted></video>
+    <p class="scanMsg" id="scanMsg" hidden></p>
+    <button id="btnScanCancel" class="btn ghost" style="margin-top:12px">ยกเลิก</button>
+  </div>
+</div>
 
 <!-- โมดัลถามว่ามี draft ค้างอยู่ ทำต่อไหม -->
 <div class="modalWrap" id="resumeModal" hidden>
@@ -473,6 +489,79 @@ validateJoinForm();
   // ล้าง query string ออกจาก URL กันสับสนตอน refresh/แชร์ลิงก์ต่อ
   if (params.has("code")) history.replaceState(null, "", location.pathname);
 })();
+
+/* ---------- สแกน QR ด้วยกล้องในตัวแอปเอง (ไม่ต้องออกไปใช้แอปกล้องแยก) ---------- */
+let scanStream = null;
+let scanRAF = null;
+
+function extractCodeFromScanText(text){
+  // รองรับทั้งลิงก์เต็ม (มี ?code=xxxx) และกรณีอ่านได้แค่ตัวเลข 4 หลักล้วน ๆ
+  try {
+    const u = new URL(text);
+    const c = u.searchParams.get("code");
+    if (c && /^\d{4}$/.test(c)) return c;
+  } catch (e) { /* ไม่ใช่ URL ก็ไม่เป็นไร ลองจับตัวเลข 4 หลักต่อ */ }
+  const m = text.match(/\b(\d{4})\b/);
+  return m ? m[1] : null;
+}
+
+async function startScan(){
+  const modal = $("#scanModal"), video = $("#scanVideo"), msg = $("#scanMsg");
+  msg.hidden = true;
+  modal.hidden = false;
+  try {
+    scanStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } });
+  } catch (e){
+    msg.textContent = "เปิดกล้องไม่ได้ — อาจไม่ได้อนุญาตสิทธิ์กล้อง ลองพิมพ์รหัสเองแทนได้เลย";
+    msg.hidden = false;
+    return;
+  }
+  video.srcObject = scanStream;
+  await video.play().catch(() => {});
+  const canvas = document.createElement("canvas");
+  const ctx = canvas.getContext("2d", { willReadFrequently: true });
+  const tick = () => {
+    if (!scanStream) return; // ถูกยกเลิก/สแกนเจอแล้วไปแล้ว
+    if (video.readyState === video.HAVE_ENOUGH_DATA){
+      canvas.width = video.videoWidth;
+      canvas.height = video.videoHeight;
+      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+      const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+      const result = window.jsQR ? jsQR(imgData.data, imgData.width, imgData.height) : null;
+      if (result && result.data){
+        const scannedCode = extractCodeFromScanText(result.data);
+        if (scannedCode){
+          stopScan();
+          $("#inCode").value = scannedCode;
+          validateJoinForm();
+          toast("สแกนสำเร็จ — รหัส " + scannedCode);
+          if ($("#inName").value.trim()) $("#btnJoin").focus();
+          else $("#inName").focus();
+          return;
+        }
+      }
+    }
+    scanRAF = requestAnimationFrame(tick);
+  };
+  scanRAF = requestAnimationFrame(tick);
+}
+
+function stopScan(){
+  if (scanRAF) cancelAnimationFrame(scanRAF);
+  scanRAF = null;
+  if (scanStream){ scanStream.getTracks().forEach(t => t.stop()); scanStream = null; }
+  $("#scanModal").hidden = true;
+  $("#scanVideo").srcObject = null;
+}
+
+$("#btnScanQr").addEventListener("click", () => {
+  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia){
+    toast("มือถือเครื่องนี้เปิดกล้องจากเว็บไม่ได้ ลองพิมพ์รหัสเองแทน");
+    return;
+  }
+  startScan();
+});
+$("#btnScanCancel").addEventListener("click", stopScan);
 
 $("#btnJoin").addEventListener("click", () => {
   code = $("#inCode").value.trim();
