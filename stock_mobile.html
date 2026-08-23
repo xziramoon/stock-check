@@ -838,9 +838,17 @@ if (!resumed){
 }
 
 /* ---------- ติดตั้งเป็นแอปได้ (PWA) — ใช้ shell เดิม ไม่ยุ่งกับ MQTT ---------- */
+// รีโหลดหน้าเองครั้งเดียวตอนมี service worker เวอร์ชันใหม่เข้าคุม กันแอปที่เปิดค้างไว้
+// (ไม่ได้ปิดแล้วเปิดใหม่) รันโค้ดเก่าค้างอยู่ทั้งที่มีเวอร์ชันใหม่มาแล้ว
 if ("serviceWorker" in navigator){
   window.addEventListener("load", () => {
     navigator.serviceWorker.register("sw.js").catch(() => {});
+  });
+  let swReloaded = false;
+  navigator.serviceWorker.addEventListener("controllerchange", () => {
+    if (swReloaded) return;
+    swReloaded = true;
+    location.reload();
   });
 }
 </script>
