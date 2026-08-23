@@ -83,6 +83,8 @@ input,select{font-family:inherit}
 .card h3 .spacer{flex:1}
 .card .body{padding:14px 16px}
 .hint{font-size:12.5px;color:var(--ink-soft);margin:8px 0 0;line-height:1.5}
+.hint a{color:var(--go);font-weight:600;text-decoration:none}
+.hint a:hover{text-decoration:underline}
 
 .btn{
   display:inline-block;text-align:center;padding:9px 16px;
@@ -422,16 +424,7 @@ body.capturingS .sTools,body.capturingS .sheetAddrow{display:none!important}
       <div class="card">
         <h3>ผลการนับ — รหัสรอบ <span id="resultCode" style="font-family:'IBM Plex Mono',monospace"></span></h3>
         <div class="body">
-          <div class="repSelectRow">
-            <label class="field">
-              <span>เลือกบริษัทที่จะดู</span>
-              <select id="resultRepSel"><option value="">— เลือกบริษัท —</option></select>
-            </label>
-          </div>
-          <div id="result2Empty" class="notReady">
-            <div class="big">เลือกบริษัทด้านบนก่อน</div>
-            เพื่อดูรายการผลนับของบริษัทนั้น ๆ
-          </div>
+          <p class="hint" id="counterFilterHint" hidden>กำลังดูเฉพาะของ <b id="counterFilterName"></b> — <a href="#" id="btnClearCounterFilter">ดูทั้งหมด</a></p>
           <table class="resultTable" id="resultTableEl" hidden>
             <thead>
               <tr>
@@ -457,16 +450,6 @@ body.capturingS .sTools,body.capturingS .sheetAddrow{display:none!important}
     </div>
     <div id="panel3Content" hidden>
       <div class="planTopBar" id="planTopBar"></div>
-      <div class="repSelectRow">
-        <label class="field">
-          <span>เลือกบริษัทที่จะวางแผน</span>
-          <select id="planRepSel"><option value="">— เลือกบริษัท —</option></select>
-        </label>
-      </div>
-      <div id="plan3Empty" class="notReady">
-        <div class="big">เลือกบริษัทด้านบนก่อน</div>
-        เพื่อวางแผนสั่งของของบริษัทนั้น ๆ
-      </div>
       <div class="planControls" id="planControlsRow" hidden>
         <button class="btn ghost sm" id="btnHideOk">ซ่อนของที่ยังพอ</button>
         <button class="btn ghost sm" id="btnAddExtra">+ เพิ่มรายการนอกลิสต์</button>
@@ -847,7 +830,6 @@ $("#btnStartRound").addEventListener("click", () => {
   store.set(resultsKey(code), {});
   store.set(resolvedKey(code), {});
   restoreResultFilter(); // รอบใหม่ยังไม่เคยเลือกดูอะไร — เคลียร์ตัวกรองขั้น 2 ของรอบก่อนทิ้ง
-  planRepFilter = ""; // เคลียร์ตัวกรองขั้น 3 ของรอบก่อนทิ้งเหมือนกัน
   exportDraft = null;
   repFilter = "";
 
@@ -913,21 +895,18 @@ function computeCountData(){
   return { job, submissions, perItem };
 }
 
-// ตัวกรองตารางผลของขั้น 2 — จำไว้ต่อรอบ (localStorage) กัน F5 แล้วตารางที่กำลังดูอยู่หายไปเงียบ ๆ
+// ตารางผลโชว์ทุกรายการเสมอ ไม่บังคับเลือกบริษัทก่อนแล้ว — คลิกชื่อผู้ส่งผลได้เลยถ้าอยากดูเฉพาะของคนนั้น
+// จำไว้ต่อรอบ (localStorage) กัน F5 แล้วตัวกรองที่เลือกดูอยู่หายไปเงียบ ๆ
 function resultFilterKey(code){ return "sc_result_filter_" + code; }
-let resultRepFilter = "";  // เซลที่เลือกดูอยู่ — ว่าง = ยังไม่เลือก ตารางไม่โผล่ (ถ้า resultShowAll ไม่ได้ตั้งไว้)
-let resultShowAll = false; // true = กำลังดูทั้งหมด (มาจากการคลิกชื่อผู้ส่งผล) ข้ามการกรองบริษัท
-let resultCounterHighlight = ""; // ชื่อผู้ส่งผลที่เพิ่งคลิก — ไว้ไฮไลต์ชิปที่เลือกอยู่เฉย ๆ
+let resultCounterFilter = ""; // ชื่อผู้ส่งผลที่กำลังดูเฉพาะของ — ว่าง = โชว์ทุกรายการ
 
 function restoreResultFilter(){
   const saved = activeRound ? (store.get(resultFilterKey(activeRound.code)) || null) : null;
-  resultRepFilter = saved ? (saved.rep || "") : "";
-  resultShowAll = saved ? !!saved.all : false;
-  resultCounterHighlight = saved ? (saved.counter || "") : "";
+  resultCounterFilter = saved ? (saved.counter || "") : "";
 }
 function saveResultFilter(){
   if (!activeRound) return;
-  store.set(resultFilterKey(activeRound.code), { rep: resultRepFilter, all: resultShowAll, counter: resultCounterHighlight });
+  store.set(resultFilterKey(activeRound.code), { counter: resultCounterFilter });
 }
 restoreResultFilter();
 
@@ -943,18 +922,6 @@ function renderStep2(){
 
   const cd = computeCountData();
 
-  // ตัวเลือกบริษัท — ไม่มีตัวเลือก "ทั้งหมด" ตั้งใจ บังคับเลือกทีละบริษัทกันหน้ารก/งง
-  // ยกเว้นมีบริษัทเดียวในลิสต์ทั้งชุด (เช่นทุกรายการเป็น "ไม่ระบุบริษัท") — เลือกให้อัตโนมัติเลย ไม่มีอะไรต้องเลือกจริง ๆ
-  const repsInJob = [...new Set(cd.job.items.map(it => it.rep || "ไม่ระบุบริษัท"))].sort((a, b) => a.localeCompare(b, "th"));
-  if (!resultRepFilter && !resultShowAll && repsInJob.length === 1){
-    resultRepFilter = repsInJob[0];
-    saveResultFilter();
-  }
-  const repSel = $("#resultRepSel");
-  repSel.innerHTML = `<option value="">— เลือกบริษัท —</option>` +
-    repsInJob.map(r => `<option value="${esc(r)}">${esc(r)}</option>`).join("");
-  repSel.value = resultRepFilter;
-
   let cCounted = 0, cNone = 0, cSkip = 0, cConflict = 0;
   Object.values(cd.perItem).forEach(p => {
     if (p.conflict && !p.final) cConflict++;
@@ -968,30 +935,29 @@ function renderStep2(){
   $("#statConflict").textContent = cConflict;
 
   // ใครส่งมาแล้วบ้าง วันที่-เวลาไหน (ไม่ใช่แค่เวลา กันสับสนเวลาดูย้อนหลังข้ามวัน)
-  // คลิกที่ชื่อได้เลย — ข้ามดรอปดาว "เลือกบริษัท" ไปดูรายการทั้งหมดทันที
+  // คลิกชื่อได้เลย — กรองตารางให้เหลือแค่ของที่คนนั้นนับจริง (ไม่รวมรายการที่เขาไม่ได้แตะ)
   const subEntries = Object.values(cd.submissions).sort((a, b) => b.at - a.at);
   $("#submitters").innerHTML = subEntries.length
     ? subEntries.map(s => {
         const dt = new Date(s.at);
         const d = dt.toLocaleDateString("th-TH", { day: "numeric", month: "short", year: "2-digit" });
         const t = dt.toLocaleTimeString("th-TH", { hour: "2-digit", minute: "2-digit" });
-        const on = resultShowAll && resultCounterHighlight === s.counter ? " on" : "";
+        const on = resultCounterFilter === s.counter ? " on" : "";
         return `<span class="subChip${on}" data-counter="${esc(s.counter)}">${esc(s.counter)} <span class="t">${d} · ${t}</span></span>`;
       }).join("")
     : `<span class="noSub">ยังไม่มีใครส่งผลเข้ามา</span>`;
 
-  // ตารางผล — โผล่ก็ต่อเมื่อเลือกบริษัทแล้ว หรือกำลังดูทั้งหมด (จากคลิกชื่อผู้ส่งผล)
-  if (!resultRepFilter && !resultShowAll){
-    $("#result2Empty").hidden = false;
-    $("#resultTableEl").hidden = true;
-    return;
-  }
-  $("#result2Empty").hidden = true;
+  // ตารางผลโชว์ทุกรายการเสมอ — ถ้าเลือกดูเฉพาะของใครไว้ก็กรองเหลือแค่ที่คนนั้นนับจริง
   $("#resultTableEl").hidden = false;
+  $("#counterFilterHint").hidden = !resultCounterFilter;
+  if (resultCounterFilter) $("#counterFilterName").textContent = resultCounterFilter;
 
-  const itemsToShow = resultShowAll
+  const itemsToShow = !resultCounterFilter
     ? cd.job.items
-    : cd.job.items.filter(it => (it.rep || "ไม่ระบุบริษัท") === resultRepFilter);
+    : cd.job.items.filter(it => {
+        const e = cd.perItem[it.id].entries.find(en => en.counter === resultCounterFilter);
+        return e && e.status !== "skip";
+      });
 
   const tb = $("#resultRows");
   tb.innerHTML = "";
@@ -1056,20 +1022,16 @@ $("#resultRows").addEventListener("change", e => {
   store.set(unitOverrideKey(activeRound.code), overrides);
 });
 
-$("#resultRepSel").addEventListener("change", e => {
-  resultRepFilter = e.target.value;
-  resultShowAll = false;
-  resultCounterHighlight = "";
+// คลิกชื่อผู้ส่งผล — กรองตารางเหลือเฉพาะของคนนั้น คลิกซ้ำ (หรือกด "ดูทั้งหมด") เพื่อกลับไปดูทุกคน
+$("#submitters").addEventListener("click", e => {
+  const chip = e.target.closest(".subChip[data-counter]"); if (!chip) return;
+  resultCounterFilter = resultCounterFilter === chip.dataset.counter ? "" : chip.dataset.counter;
   saveResultFilter();
   renderStep2();
 });
-
-// คลิกชื่อผู้ส่งผล — ข้ามดรอปดาว "เลือกบริษัท" ไปดูรายการทั้งหมดทันที
-$("#submitters").addEventListener("click", e => {
-  const chip = e.target.closest(".subChip[data-counter]"); if (!chip) return;
-  resultShowAll = true;
-  resultRepFilter = "";
-  resultCounterHighlight = chip.dataset.counter;
+$("#btnClearCounterFilter").addEventListener("click", e => {
+  e.preventDefault();
+  resultCounterFilter = "";
   saveResultFilter();
   renderStep2();
 });
@@ -1103,10 +1065,8 @@ function flashUpdatedRows(ids){
    เก็บที่ sc_plan_<code> = { items:{[id]:{qty,dropped,touched}}, extra:[{id,name,unit,qty,rep,dropped,touched}] }
    ============================================================ */
 function planKey(code){ return "sc_plan_" + code; }
-function planFilterKey(code){ return "sc_plan_filter_" + code; }
 let hideOk = false;          // ปุ่ม "ซ่อนของที่ยังพอ"
-let collapsedGroups = {};    // พับ/กางกลุ่มเซล (อยู่ในหน่วยความจำหน้านี้พอ ไม่ต้องจำถาวร)
-let planRepFilter = activeRound ? (store.get(planFilterKey(activeRound.code)) || "") : "";      // เซลที่เลือกวางแผนอยู่ — ว่าง = ยังไม่เลือก ลิสต์ไม่โผล่ (จำไว้ต่อรอบ กัน F5 แล้วหลุด)
+let collapsedGroups = {};    // พับ/กางกลุ่มเซล (อยู่ในหน่วยความจำหน้านี้พอ ไม่ต้องจำถาวร) — โชว์ทุกบริษัทเสมอ พับดูทีละกลุ่มได้แทนการบังคับเลือก
 
 function loadPlan(){
   if (!activeRound) return null;
@@ -1171,28 +1131,10 @@ function renderStep3(){
     return a.localeCompare(b, "th");
   });
 
-  // ตัวเลือกบริษัท — ไม่มีตัวเลือก "ทั้งหมด" ตั้งใจ บังคับเลือกทีละบริษัทกันหน้ารก/งง
-  // ยกเว้นมีบริษัทเดียวในลิสต์ทั้งชุด (เช่นทุกรายการเป็น "ไม่ระบุบริษัท") — เลือกให้อัตโนมัติเลย ไม่มีอะไรต้องเลือกจริง ๆ
-  if (!planRepFilter && repNames.length === 1){
-    planRepFilter = repNames[0];
-    store.set(planFilterKey(activeRound.code), planRepFilter);
-  }
-  const planSel = $("#planRepSel");
-  planSel.innerHTML = `<option value="">— เลือกบริษัท —</option>` +
-    repNames.map(r => `<option value="${esc(r)}">${esc(r)}</option>`).join("");
-  planSel.value = planRepFilter;
-
-  // ลิสต์รายการโผล่ก็ต่อเมื่อเลือกบริษัทแล้วเท่านั้น กันหน้ารก/งง
-  if (!planRepFilter){
-    $("#plan3Empty").hidden = false;
-    $("#planControlsRow").hidden = true;
-    $("#planGroups").innerHTML = "";
-    return;
-  }
-  $("#plan3Empty").hidden = true;
+  // โชว์ทุกบริษัทพร้อมกันเสมอ ไม่บังคับเลือกก่อนแล้ว — พับ/กางแต่ละกลุ่มได้ (คลิกหัวกลุ่ม) กันหน้ารกตอนมีของเยอะแทน
   $("#planControlsRow").hidden = false;
 
-  const repsToShow = [planRepFilter];
+  const repsToShow = repNames;
   const wrap = $("#planGroups");
   wrap.innerHTML = "";
   repsToShow.forEach(rep => {
@@ -1295,11 +1237,6 @@ $("#planGroups").addEventListener("change", e => {
 $("#planGroups").addEventListener("focusout", e => {
   if (e.target.classList.contains("orderQty") || e.target.dataset.k === "name") renderStep3();
 });
-$("#planRepSel").addEventListener("change", e => {
-  planRepFilter = e.target.value;
-  if (activeRound) store.set(planFilterKey(activeRound.code), planRepFilter);
-  renderStep3();
-});
 $("#btnHideOk").addEventListener("click", () => {
   hideOk = !hideOk;
   $("#btnHideOk").textContent = hideOk ? "แสดงทั้งหมด" : "ซ่อนของที่ยังพอ";
@@ -1307,9 +1244,7 @@ $("#btnHideOk").addEventListener("click", () => {
 });
 $("#btnAddExtra").addEventListener("click", () => {
   const plan = loadPlan(); if (!plan) return;
-  // กำลังดูบริษัทไหนอยู่ ให้รายการใหม่เข้าบริษัทนั้นเลย จะได้ไม่หายไปจากสายตา
-  const defaultRep = planRepFilter || "";
-  plan.extra.push({ id: "x" + Date.now(), name: "สินค้าใหม่ (นอกลิสต์)", unit: "ชิ้น", qty: 1, rep: defaultRep, dropped: false, touched: true });
+  plan.extra.push({ id: "x" + Date.now(), name: "สินค้าใหม่ (นอกลิสต์)", unit: "ชิ้น", qty: 1, rep: "", dropped: false, touched: true });
   savePlan(plan); renderStep3();
   toast("เพิ่มรายการนอกลิสต์แล้ว — แก้ชื่อ/บริษัท/จำนวนได้เลย");
 });
