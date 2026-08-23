@@ -61,6 +61,12 @@ input,select{font-family:inherit}
 }
 .tab .n{display:inline-block;width:20px;height:20px;line-height:20px;border-radius:50%;background:var(--desk-edge);color:var(--ink);font-size:12px;margin-right:7px}
 .tab.on{color:var(--ink);border-bottom-color:var(--stamp)}
+.tabBadge{
+  display:inline-block;min-width:18px;height:18px;line-height:18px;padding:0 5px;margin-left:6px;
+  border-radius:9px;background:var(--stamp);color:#fff;font-size:11px;font-weight:700;
+  animation:tabBadgePulse 1.4s ease-in-out infinite;
+}
+@keyframes tabBadgePulse{0%,100%{transform:scale(1)}50%{transform:scale(1.15)}}
 .tab.on .n{background:var(--stamp);color:#fff}
 
 /* ---------- shell ---------- */
@@ -255,6 +261,11 @@ td select:focus{outline:none;background:rgba(31,111,92,.13)}
   content:"";position:absolute;left:0;right:0;top:0;height:7px;
   background:radial-gradient(circle at 5px 0,transparent 4px,var(--paper) 4.5px) 0 0/10px 7px repeat-x;
 }
+.repBanner{
+  background:var(--stamp);color:#fff;font-family:"Bai Jamjuree",sans-serif;
+  font-size:19px;font-weight:700;text-align:center;letter-spacing:.02em;
+  padding:9px 12px;border-radius:2px;margin-bottom:16px;
+}
 .sheetHeadS{display:flex;justify-content:space-between;align-items:flex-start;gap:16px}
 .sheetTitleS{font-family:"Bai Jamjuree",sans-serif;font-size:24px;font-weight:700;line-height:1.2}
 .sheetSubS{font-size:14px;color:var(--ink-soft);margin-top:2px}
@@ -317,7 +328,7 @@ body.capturingS .sTools,body.capturingS .sheetAddrow{display:none!important}
 
 <div class="tabs" id="tabs">
   <button class="tab on" data-tab="1"><span class="n">1</span>ตั้งลิสต์</button>
-  <button class="tab" data-tab="2"><span class="n">2</span>รับผล</button>
+  <button class="tab" data-tab="2"><span class="n">2</span>รับผล<span class="tabBadge" id="tabBadge2" hidden>0</span></button>
   <button class="tab" data-tab="3"><span class="n">3</span>วางแผน</button>
   <button class="tab" data-tab="4"><span class="n">4</span>ใบส่งเซล</button>
 </div>
@@ -493,6 +504,7 @@ body.capturingS .sTools,body.capturingS .sheetAddrow{display:none!important}
         </aside>
         <div class="sheetWrapS">
           <div class="sheetS" id="sheetS">
+            <div class="repBanner" id="repBanner"></div>
             <div class="sheetHeadS">
               <div>
                 <div class="sheetTitleS" contenteditable data-sf="shop">ร้านวงเวียน</div>
@@ -615,6 +627,9 @@ function onMqttMessage(topic, payload){
   store.set(key, all);
   renderStep2();
   flashUpdatedRows(result.counts.map(c => c.id));
+  toast(`${result.counter} ส่งผลนับเข้ามาแล้ว`);
+  // แจ้งเตือนที่แท็บ "รับผล" ด้วย เผื่อเถ้าแก่อยู่แท็บอื่นแล้วพลาด toast
+  if (currentTab !== "2"){ unseenResults++; updateTabBadge(); }
 }
 connectMqtt();
 
@@ -893,12 +908,14 @@ function renderStep2(){
   $("#statSkip").textContent = cSkip;
   $("#statConflict").textContent = cConflict;
 
-  // ใครส่งมาแล้วบ้าง เวลาไหน
+  // ใครส่งมาแล้วบ้าง วันที่-เวลาไหน (ไม่ใช่แค่เวลา กันสับสนเวลาดูย้อนหลังข้ามวัน)
   const subEntries = Object.values(cd.submissions).sort((a, b) => b.at - a.at);
   $("#submitters").innerHTML = subEntries.length
     ? subEntries.map(s => {
-        const t = new Date(s.at).toLocaleTimeString("th-TH", { hour: "2-digit", minute: "2-digit" });
-        return `<span class="subChip">${esc(s.counter)} <span class="t">${t}</span></span>`;
+        const dt = new Date(s.at);
+        const d = dt.toLocaleDateString("th-TH", { day: "numeric", month: "short", year: "2-digit" });
+        const t = dt.toLocaleTimeString("th-TH", { hour: "2-digit", minute: "2-digit" });
+        return `<span class="subChip">${esc(s.counter)} <span class="t">${d} · ${t}</span></span>`;
       }).join("")
     : `<span class="noSub">ยังไม่มีใครส่งผลเข้ามา</span>`;
 
@@ -1305,6 +1322,9 @@ function renderStep4(){
   const repText = exportDraft.head.rep || repFilter;
   if (repEl && repEl.textContent !== repText) repEl.textContent = repText;
 
+  // ป้ายเซลตัวใหญ่บนสุดของใบ — กันงงว่ารูปนี้ส่งให้บริษัทไหน (โผล่ในรูป export ด้วยเพราะอยู่ใน #sheetS)
+  $("#repBanner").textContent = repText ? `ส่งให้เซล: ${repText}` : "ยังไม่ได้เลือกเซล";
+
   renderSheetRows();
 }
 
@@ -1494,10 +1514,18 @@ $("#btnImgS").addEventListener("click", exportImages);
 /* ============================================================
    แท็บ
    ============================================================ */
+let currentTab = "1";
+let unseenResults = 0; // มีผลนับใหม่เข้ามาระหว่างที่เถ้าแก่อยู่แท็บอื่น — โผล่เป็น badge แดงที่แท็บ "รับผล"
+function updateTabBadge(){
+  const badge = $("#tabBadge2");
+  badge.hidden = unseenResults <= 0;
+  badge.textContent = unseenResults;
+}
 function switchTab(n){
+  currentTab = n;
   document.querySelectorAll(".tab").forEach(t => t.classList.toggle("on", t.dataset.tab === n));
   document.querySelectorAll(".panel").forEach(p => p.classList.toggle("on", p.id === "panel" + n));
-  if (n === "2") renderStep2();
+  if (n === "2"){ renderStep2(); unseenResults = 0; updateTabBadge(); }
   if (n === "3") renderStep3();
   if (n === "4") renderStep4();
 }

@@ -100,6 +100,11 @@ input{font-family:inherit}
 .progressRow b{font-family:"IBM Plex Mono",monospace}
 .progressBar{height:8px;background:#d3dbd6;border-radius:5px;overflow:hidden;margin:0 2px}
 .progressFill{height:100%;background:var(--go);width:0%;transition:width .2s}
+.repFilterRow{display:flex;align-items:center;gap:8px;margin-top:9px;font-size:12.5px;color:var(--ink-soft)}
+.repFilterRow select{
+  flex:1;height:40px;font-size:14px;color:var(--ink);
+  border:1px solid var(--desk-edge);border-radius:var(--radius);background:#fff;padding:0 8px;
+}
 .filters{display:flex;gap:6px;margin-top:9px}
 .filt{
   flex:1;padding:9px 4px;border:1px solid var(--desk-edge);background:#fff;color:var(--ink-soft);
@@ -225,6 +230,10 @@ input{font-family:inherit}
     <div class="countTop">
       <div class="progressRow"><span id="progressText">นับแล้ว 0/0</span><span id="codeTag" style="font-family:'IBM Plex Mono',monospace;color:var(--ink-soft)"></span></div>
       <div class="progressBar"><div class="progressFill" id="progressFill"></div></div>
+      <div class="repFilterRow">
+        <span>บริษัท/เซล</span>
+        <select id="repFilterSel"><option value="">— ทั้งหมด —</option></select>
+      </div>
       <div class="filters">
         <button class="filt on" data-f="all">ทั้งหมด</button>
         <button class="filt" data-f="skip">ยังไม่นับ</button>
@@ -302,6 +311,7 @@ let counts = {};            // { itemId: {qty, status} }  status: skip | counted
 let nameOverrides = {};     // { itemId: "ชื่อที่แก้เอง" } — แก้ได้เฉพาะสำเนาบนมือถือ ไม่ย้อนกลับไปแก้ job เดิม
 let unitOverrides = {};     // { itemId: "หน่วยที่เลือกเอง" } — ใช้ตอนคอมไม่ได้ตั้งหน่วยไว้ หรือพนักงานอยากแก้เอง
 let filter = "all";         // ตัวกรองที่กำลังเลือก: all | skip | done
+let repFilter = "";         // เลือกเช็คของบริษัท/เซลไหนก่อน — ว่าง = ทั้งหมด
 let pendingSend = false;    // true = กดส่งไปแล้วแต่ยังไม่ได้ publish (ออฟไลน์)
 let lastSentAt = null;      // เวลาที่ส่งสำเร็จล่าสุด (แสดงในหน้าส่งแล้ว)
 let waitTimer = null;
@@ -511,8 +521,19 @@ function renderRows(){
   $("#progressFill").style.width = total ? (handled / total * 100) + "%" : "0%";
   $("#btnSubmit").textContent = `ส่งผลนับ (${handled} รายการ)`;
 
+  // ตัวเลือกบริษัท/เซล — ให้เลือกเช็คทีละบริษัทได้ ไม่ต้องไล่หาปนกันทั้งลิสต์
+  const repsInJob = [...new Set(job.items.map(it => it.rep || "ไม่ระบุเซล"))].sort((a, b) => a.localeCompare(b, "th"));
+  const repSel = $("#repFilterSel");
+  if (repSel.dataset.built !== job.code){
+    repSel.innerHTML = `<option value="">— ทั้งหมด —</option>` +
+      repsInJob.map(r => `<option value="${esc(r)}">${esc(r)}</option>`).join("");
+    repSel.dataset.built = job.code;
+  }
+  repSel.value = repFilter;
+
   let shown = 0;
   job.items.forEach(it => {
+    if (repFilter && (it.rep || "ไม่ระบุเซล") !== repFilter) return;
     const c = counts[it.id] || { qty: null, status: "skip" };
     if (!passesFilter(c.status)) return;
     shown++;
@@ -541,6 +562,11 @@ function renderRows(){
 const esc = s => String(s ?? "").replace(/[&<>]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" }[c]));
 
 
+/* เลือกบริษัท/เซลที่จะเช็คก่อน */
+$("#repFilterSel").addEventListener("change", e => {
+  repFilter = e.target.value;
+  renderRows();
+});
 /* กดปุ่มกรอง */
 document.querySelectorAll(".filt").forEach(b => {
   b.addEventListener("click", () => {
