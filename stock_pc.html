@@ -370,7 +370,7 @@ body.capturingS .sTools,body.capturingS .sheetAddrow{display:none!important}
               <th class="colName">ชื่อสินค้า</th>
               <th class="colUnit">หน่วย</th>
               <th class="colTarget">ยอดเป้า</th>
-              <th class="colRep">เซล</th>
+              <th class="colRep">บริษัท</th>
               <th class="colDel"></th>
             </tr>
           </thead>
@@ -379,7 +379,7 @@ body.capturingS .sTools,body.capturingS .sheetAddrow{display:none!important}
         <div class="addrow">
           <button id="btnAddRow">+ เพิ่มแถว</button>
         </div>
-        <p class="hint">วางข้อมูลจาก Excel ได้เลย (คั่นด้วย Tab) — ระบบจะแตกเป็นแถวให้อัตโนมัติ ลำดับคอลัมน์: ชื่อสินค้า / หน่วย / ยอดเป้า / เซล</p>
+        <p class="hint">วางข้อมูลจาก Excel ได้เลย (คั่นด้วย Tab) — ระบบจะแตกเป็นแถวให้อัตโนมัติ ลำดับคอลัมน์: ชื่อสินค้า / หน่วย / ยอดเป้า / บริษัท</p>
       </div>
     </div>
 
@@ -420,13 +420,13 @@ body.capturingS .sTools,body.capturingS .sheetAddrow{display:none!important}
         <div class="body">
           <div class="repSelectRow">
             <label class="field">
-              <span>เลือกเซลที่จะดู</span>
-              <select id="resultRepSel"><option value="">— เลือกเซล —</option></select>
+              <span>เลือกบริษัทที่จะดู</span>
+              <select id="resultRepSel"><option value="">— เลือกบริษัท —</option></select>
             </label>
           </div>
           <div id="result2Empty" class="notReady">
-            <div class="big">เลือกเซลด้านบนก่อน</div>
-            เพื่อดูรายการผลนับของเซลนั้น ๆ
+            <div class="big">เลือกบริษัทด้านบนก่อน</div>
+            เพื่อดูรายการผลนับของบริษัทนั้น ๆ
           </div>
           <table class="resultTable" id="resultTableEl" hidden>
             <thead>
@@ -455,13 +455,13 @@ body.capturingS .sTools,body.capturingS .sheetAddrow{display:none!important}
       <div class="planTopBar" id="planTopBar"></div>
       <div class="repSelectRow">
         <label class="field">
-          <span>เลือกเซลที่จะวางแผน</span>
-          <select id="planRepSel"><option value="">— เลือกเซล —</option></select>
+          <span>เลือกบริษัทที่จะวางแผน</span>
+          <select id="planRepSel"><option value="">— เลือกบริษัท —</option></select>
         </label>
       </div>
       <div id="plan3Empty" class="notReady">
-        <div class="big">เลือกเซลด้านบนก่อน</div>
-        เพื่อวางแผนสั่งของของเซลนั้น ๆ
+        <div class="big">เลือกบริษัทด้านบนก่อน</div>
+        เพื่อวางแผนสั่งของของบริษัทนั้น ๆ
       </div>
       <div class="planControls" id="planControlsRow" hidden>
         <button class="btn ghost sm" id="btnHideOk">ซ่อนของที่ยังพอ</button>
@@ -481,7 +481,7 @@ body.capturingS .sTools,body.capturingS .sheetAddrow{display:none!important}
     <div id="panel4Content" hidden>
       <div class="repSelectRow">
         <label class="field">
-          <span>เลือกเซล</span>
+          <span>เลือกบริษัท</span>
           <select id="repSel"></select>
         </label>
       </div>
@@ -515,7 +515,7 @@ body.capturingS .sTools,body.capturingS .sheetAddrow{display:none!important}
               </div>
               <div class="metaS">
                 <div><span class="lbl">วันที่</span><span contenteditable data-sf="date"></span></div>
-                <div><span class="lbl">เซล</span><span contenteditable data-sf="rep"></span></div>
+                <div><span class="lbl">บริษัท</span><span contenteditable data-sf="rep"></span></div>
               </div>
             </div>
             <div class="dividerS"></div>
@@ -910,10 +910,10 @@ function renderStep2(){
 
   const cd = computeCountData();
 
-  // ตัวเลือกเซล
-  const repsInJob = [...new Set(cd.job.items.map(it => it.rep || "ไม่ระบุเซล"))].sort((a, b) => a.localeCompare(b, "th"));
+  // ตัวเลือกบริษัท — ไม่มีตัวเลือก "ทั้งหมด" ตั้งใจ บังคับเลือกทีละบริษัทกันหน้ารก/งง
+  const repsInJob = [...new Set(cd.job.items.map(it => it.rep || "ไม่ระบุบริษัท"))].sort((a, b) => a.localeCompare(b, "th"));
   const repSel = $("#resultRepSel");
-  repSel.innerHTML = `<option value="">— เลือกเซล —</option><option value="__ALL__">ทั้งหมด (${cd.job.items.length} รายการ)</option>` +
+  repSel.innerHTML = `<option value="">— เลือกบริษัท —</option>` +
     repsInJob.map(r => `<option value="${esc(r)}">${esc(r)}</option>`).join("");
   repSel.value = resultRepFilter;
 
@@ -949,9 +949,7 @@ function renderStep2(){
   $("#result2Empty").hidden = true;
   $("#resultTableEl").hidden = false;
 
-  const itemsToShow = resultRepFilter === "__ALL__"
-    ? cd.job.items
-    : cd.job.items.filter(it => (it.rep || "ไม่ระบุเซล") === resultRepFilter);
+  const itemsToShow = cd.job.items.filter(it => (it.rep || "ไม่ระบุบริษัท") === resultRepFilter);
 
   const tb = $("#resultRows");
   tb.innerHTML = "";
@@ -1110,20 +1108,20 @@ function renderStep3(){
   updatePlanTopBarOnly();
 
   const groups = {};
-  rows.forEach(r => { (groups[r.rep || "ไม่ระบุเซล"] ??= []).push(r); });
+  rows.forEach(r => { (groups[r.rep || "ไม่ระบุบริษัท"] ??= []).push(r); });
   const repNames = Object.keys(groups).sort((a, b) => {
-    if (a === "ไม่ระบุเซล") return 1;
-    if (b === "ไม่ระบุเซล") return -1;
+    if (a === "ไม่ระบุบริษัท") return 1;
+    if (b === "ไม่ระบุบริษัท") return -1;
     return a.localeCompare(b, "th");
   });
 
-  // ตัวเลือกเซล
+  // ตัวเลือกบริษัท — ไม่มีตัวเลือก "ทั้งหมด" ตั้งใจ บังคับเลือกทีละบริษัทกันหน้ารก/งง
   const planSel = $("#planRepSel");
-  planSel.innerHTML = `<option value="">— เลือกเซล —</option><option value="__ALL__">ทั้งหมด (${rows.length} รายการ)</option>` +
+  planSel.innerHTML = `<option value="">— เลือกบริษัท —</option>` +
     repNames.map(r => `<option value="${esc(r)}">${esc(r)}</option>`).join("");
   planSel.value = planRepFilter;
 
-  // ลิสต์รายการโผล่ก็ต่อเมื่อเลือกเซลแล้วเท่านั้น กันหน้ารกตอนมีของเป็นร้อยรายการ
+  // ลิสต์รายการโผล่ก็ต่อเมื่อเลือกบริษัทแล้วเท่านั้น กันหน้ารก/งง
   if (!planRepFilter){
     $("#plan3Empty").hidden = false;
     $("#planControlsRow").hidden = true;
@@ -1133,7 +1131,7 @@ function renderStep3(){
   $("#plan3Empty").hidden = true;
   $("#planControlsRow").hidden = false;
 
-  const repsToShow = planRepFilter === "__ALL__" ? repNames : [planRepFilter];
+  const repsToShow = [planRepFilter];
   const wrap = $("#planGroups");
   wrap.innerHTML = "";
   repsToShow.forEach(rep => {
@@ -1160,7 +1158,7 @@ function planRowHtml(r){
   const fine = !r.plan.dropped && !(r.plan.qty > 0);
   const nameCell = r.isExtra
     ? `<span contenteditable data-k="name" data-id="${esc(r.id)}">${esc(r.name)}</span>
-       <input class="extraRep" type="text" data-k="rep" data-id="${esc(r.id)}" value="${esc(r.rep)}" placeholder="ระบุเซล">`
+       <input class="extraRep" type="text" data-k="rep" data-id="${esc(r.id)}" value="${esc(r.rep)}" placeholder="ระบุบริษัท">`
     : esc(r.name);
   const unitCell = r.isExtra
     ? `<select data-k="unit" data-id="${esc(r.id)}">${unitOptionsHtml(r.unit)}</select>`
@@ -1247,11 +1245,11 @@ $("#btnHideOk").addEventListener("click", () => {
 });
 $("#btnAddExtra").addEventListener("click", () => {
   const plan = loadPlan(); if (!plan) return;
-  // ถ้ากำลังดูเซลใดเซลหนึ่งอยู่ ให้รายการใหม่เข้าเซลนั้นเลย จะได้ไม่หายไปจากสายตา
-  const defaultRep = (planRepFilter && planRepFilter !== "__ALL__") ? planRepFilter : "";
+  // กำลังดูบริษัทไหนอยู่ ให้รายการใหม่เข้าบริษัทนั้นเลย จะได้ไม่หายไปจากสายตา
+  const defaultRep = planRepFilter || "";
   plan.extra.push({ id: "x" + Date.now(), name: "สินค้าใหม่ (นอกลิสต์)", unit: "ชิ้น", qty: 1, rep: defaultRep, dropped: false, touched: true });
   savePlan(plan); renderStep3();
-  toast("เพิ่มรายการนอกลิสต์แล้ว — แก้ชื่อ/เซล/จำนวนได้เลย");
+  toast("เพิ่มรายการนอกลิสต์แล้ว — แก้ชื่อ/บริษัท/จำนวนได้เลย");
 });
 $("#btnResetStep3").addEventListener("click", () => {
   if (!activeRound) return;
@@ -1288,11 +1286,11 @@ function buildExportItemsFromPlan(){
   activeRound.job.items.forEach(it => {
     const p = plan.items[it.id];
     if (!p || p.dropped || !(p.qty > 0)) return;
-    items.push({ id: it.id, name: nameMap[it.name] || it.name, originalName: it.name, qty: p.qty, unit: resolvedUnit(it.id, cd, it.unit), rep: it.rep || "ไม่ระบุเซล", type: "item" });
+    items.push({ id: it.id, name: nameMap[it.name] || it.name, originalName: it.name, qty: p.qty, unit: resolvedUnit(it.id, cd, it.unit), rep: it.rep || "ไม่ระบุบริษัท", type: "item" });
   });
   plan.extra.forEach(ex => {
     if (ex.dropped || !(ex.qty > 0)) return;
-    items.push({ id: ex.id, name: nameMap[ex.name] || ex.name, originalName: ex.name, qty: ex.qty, unit: ex.unit, rep: ex.rep || "ไม่ระบุเซล", type: "item" });
+    items.push({ id: ex.id, name: nameMap[ex.name] || ex.name, originalName: ex.name, qty: ex.qty, unit: ex.unit, rep: ex.rep || "ไม่ระบุบริษัท", type: "item" });
   });
   return items;
 }
@@ -1344,7 +1342,7 @@ function renderStep4(){
   if (repEl && repEl.textContent !== repText) repEl.textContent = repText;
 
   // ป้ายเซลตัวใหญ่บนสุดของใบ — กันงงว่ารูปนี้ส่งให้บริษัทไหน (โผล่ในรูป export ด้วยเพราะอยู่ใน #sheetS)
-  $("#repBanner").textContent = repText ? `ส่งให้เซล: ${repText}` : "ยังไม่ได้เลือกเซล";
+  $("#repBanner").textContent = repText ? `ส่งให้บริษัท: ${repText}` : "ยังไม่ได้เลือกบริษัท";
 
   renderSheetRows();
 }
@@ -1461,7 +1459,7 @@ function asTextS(){
   L.push(h.shop + (h.branch ? ` (${h.branch})` : ""));
   const l2 = [];
   if (h.date) l2.push("สั่งของ " + h.date);
-  if (repFilter) l2.push("เซล: " + (h.rep || repFilter));
+  if (repFilter) l2.push("บริษัท: " + (h.rep || repFilter));
   if (l2.length) L.push(l2.join("  ·  "));
   L.push("");
   let n = 0, w = 0;

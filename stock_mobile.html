@@ -237,7 +237,7 @@ input{font-family:inherit}
       <div class="progressRow"><span id="progressText">นับแล้ว 0/0</span><span id="codeTag" style="font-family:'IBM Plex Mono',monospace;color:var(--ink-soft)"></span></div>
       <div class="progressBar"><div class="progressFill" id="progressFill"></div></div>
       <div class="repFilterRow">
-        <span>บริษัท/เซล</span>
+        <span>บริษัท</span>
         <select id="repFilterSel"><option value="">— ทั้งหมด —</option></select>
       </div>
       <div class="filters">
@@ -624,7 +624,7 @@ function renderRows(){
   $("#btnSubmit").textContent = `ส่งผลนับ (${handled} รายการ)`;
 
   // ตัวเลือกบริษัท/เซล — ให้เลือกเช็คทีละบริษัทได้ ไม่ต้องไล่หาปนกันทั้งลิสต์
-  const repsInJob = [...new Set(job.items.map(it => it.rep || "ไม่ระบุเซล"))].sort((a, b) => a.localeCompare(b, "th"));
+  const repsInJob = [...new Set(job.items.map(it => it.rep || "ไม่ระบุบริษัท"))].sort((a, b) => a.localeCompare(b, "th"));
   const repSel = $("#repFilterSel");
   if (repSel.dataset.built !== job.code){
     repSel.innerHTML = `<option value="">— ทั้งหมด —</option>` +
@@ -635,7 +635,7 @@ function renderRows(){
 
   let shown = 0;
   job.items.forEach(it => {
-    if (repFilter && (it.rep || "ไม่ระบุเซล") !== repFilter) return;
+    if (repFilter && (it.rep || "ไม่ระบุบริษัท") !== repFilter) return;
     const c = counts[it.id] || { qty: null, status: "skip" };
     if (!passesFilter(c.status)) return;
     shown++;
