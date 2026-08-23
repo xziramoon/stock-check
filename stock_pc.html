@@ -847,6 +847,7 @@ $("#btnStartRound").addEventListener("click", () => {
   store.set(resultsKey(code), {});
   store.set(resolvedKey(code), {});
   restoreResultFilter(); // รอบใหม่ยังไม่เคยเลือกดูอะไร — เคลียร์ตัวกรองขั้น 2 ของรอบก่อนทิ้ง
+  planRepFilter = ""; // เคลียร์ตัวกรองขั้น 3 ของรอบก่อนทิ้งเหมือนกัน
   exportDraft = null;
   repFilter = "";
 
@@ -943,7 +944,12 @@ function renderStep2(){
   const cd = computeCountData();
 
   // ตัวเลือกบริษัท — ไม่มีตัวเลือก "ทั้งหมด" ตั้งใจ บังคับเลือกทีละบริษัทกันหน้ารก/งง
+  // ยกเว้นมีบริษัทเดียวในลิสต์ทั้งชุด (เช่นทุกรายการเป็น "ไม่ระบุบริษัท") — เลือกให้อัตโนมัติเลย ไม่มีอะไรต้องเลือกจริง ๆ
   const repsInJob = [...new Set(cd.job.items.map(it => it.rep || "ไม่ระบุบริษัท"))].sort((a, b) => a.localeCompare(b, "th"));
+  if (!resultRepFilter && !resultShowAll && repsInJob.length === 1){
+    resultRepFilter = repsInJob[0];
+    saveResultFilter();
+  }
   const repSel = $("#resultRepSel");
   repSel.innerHTML = `<option value="">— เลือกบริษัท —</option>` +
     repsInJob.map(r => `<option value="${esc(r)}">${esc(r)}</option>`).join("");
@@ -1097,9 +1103,10 @@ function flashUpdatedRows(ids){
    เก็บที่ sc_plan_<code> = { items:{[id]:{qty,dropped,touched}}, extra:[{id,name,unit,qty,rep,dropped,touched}] }
    ============================================================ */
 function planKey(code){ return "sc_plan_" + code; }
+function planFilterKey(code){ return "sc_plan_filter_" + code; }
 let hideOk = false;          // ปุ่ม "ซ่อนของที่ยังพอ"
 let collapsedGroups = {};    // พับ/กางกลุ่มเซล (อยู่ในหน่วยความจำหน้านี้พอ ไม่ต้องจำถาวร)
-let planRepFilter = "";      // เซลที่เลือกวางแผนอยู่ — ว่าง = ยังไม่เลือก ลิสต์ไม่โผล่
+let planRepFilter = activeRound ? (store.get(planFilterKey(activeRound.code)) || "") : "";      // เซลที่เลือกวางแผนอยู่ — ว่าง = ยังไม่เลือก ลิสต์ไม่โผล่ (จำไว้ต่อรอบ กัน F5 แล้วหลุด)
 
 function loadPlan(){
   if (!activeRound) return null;
@@ -1165,6 +1172,11 @@ function renderStep3(){
   });
 
   // ตัวเลือกบริษัท — ไม่มีตัวเลือก "ทั้งหมด" ตั้งใจ บังคับเลือกทีละบริษัทกันหน้ารก/งง
+  // ยกเว้นมีบริษัทเดียวในลิสต์ทั้งชุด (เช่นทุกรายการเป็น "ไม่ระบุบริษัท") — เลือกให้อัตโนมัติเลย ไม่มีอะไรต้องเลือกจริง ๆ
+  if (!planRepFilter && repNames.length === 1){
+    planRepFilter = repNames[0];
+    store.set(planFilterKey(activeRound.code), planRepFilter);
+  }
   const planSel = $("#planRepSel");
   planSel.innerHTML = `<option value="">— เลือกบริษัท —</option>` +
     repNames.map(r => `<option value="${esc(r)}">${esc(r)}</option>`).join("");
@@ -1285,6 +1297,7 @@ $("#planGroups").addEventListener("focusout", e => {
 });
 $("#planRepSel").addEventListener("change", e => {
   planRepFilter = e.target.value;
+  if (activeRound) store.set(planFilterKey(activeRound.code), planRepFilter);
   renderStep3();
 });
 $("#btnHideOk").addEventListener("click", () => {
