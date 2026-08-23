@@ -690,6 +690,7 @@ $("#btnNewList").addEventListener("click", () => {
   if (items.length && !confirm("ล้างลิสต์ปัจจุบันทั้งหมด แล้วเริ่มลิสต์ใหม่ว่าง ๆ ใช่ไหม?")) return;
   items = [{ name: "", unit: "", target: 0, rep: "" }];
   saveItems(); renderStep1();
+  setCurrentPresetName("");
   $("#step1Rows [data-k='name']")?.focus();
   toast("เริ่มลิสต์ใหม่แล้ว — พิมพ์เพิ่มได้เลย");
 });
@@ -739,6 +740,13 @@ $("#step1Rows").addEventListener("paste", e => {
   store.set("sc_presets", existingPresets);
 }
 let presets = store.get("sc_presets") || {};
+// ชื่อชุด(preset)ที่กำลังใช้อยู่ตอนนี้ — ติดไปกับรอบนับตอนกดเริ่ม เพื่อให้เช็คง่ายว่ารอบนี้คือชุดไหน
+let currentPresetName = store.get("sc_current_preset_name") || "";
+function setCurrentPresetName(name){
+  currentPresetName = name || "";
+  store.set("sc_current_preset_name", currentPresetName);
+  renderCodePanel();
+}
 function renderPresetSel(){
   const sel = $("#presetSel");
   const cur = sel.value;
@@ -754,6 +762,7 @@ $("#btnSavePreset").addEventListener("click", () => {
   store.set("sc_presets", presets);
   renderPresetSel();
   $("#presetSel").value = name;
+  setCurrentPresetName(name);
   toast(`บันทึกชุด "${name}" แล้ว`);
 });
 $("#btnLoadPreset").addEventListener("click", () => {
@@ -762,6 +771,7 @@ $("#btnLoadPreset").addEventListener("click", () => {
   items = JSON.parse(JSON.stringify(presets[name]));
   step1Snapshot = JSON.parse(JSON.stringify(items));
   saveItems(); renderStep1();
+  setCurrentPresetName(name);
   toast(`โหลดชุด "${name}" แล้ว`);
 });
 $("#btnDelPreset").addEventListener("click", () => {
@@ -782,12 +792,12 @@ function renderCodePanel(){
       <div class="lbl">รหัสรอบนี้ — ให้พนักงานสแกน QR ด้วยกล้องมือถือ (หรือพิมพ์รหัสเองก็ได้)</div>
       <div class="code">${esc(activeRound.code)}</div>
       <div class="qrWrap" id="qrWrap"></div>
-      <div class="branchLine">${esc(activeRound.job.branch)} · ${activeRound.job.items.length} รายการ</div>
+      <div class="branchLine">${esc(activeRound.job.branch)} · ${activeRound.job.items.length} รายการ${activeRound.job.presetName ? " · ชุด: " + esc(activeRound.job.presetName) : ""}</div>
       <div class="actions">
         <button class="btn go" id="btnGoStep2">ไปขั้น "รับผล" →</button>
       </div>
     </div>`;
-  $("#roundTag").textContent = "รอบ #" + activeRound.code;
+  $("#roundTag").textContent = "รอบ #" + activeRound.code + (activeRound.job.presetName ? " · " + activeRound.job.presetName : "");
   $("#btnGoStep2")?.addEventListener("click", () => switchTab("2"));
   renderJoinQr(activeRound.code);
 }
@@ -817,6 +827,7 @@ $("#btnStartRound").addEventListener("click", () => {
     v: 1,
     code,
     branch: $("#inBranch").value.trim() || "สาขาเหนือ",
+    presetName: currentPresetName || "",
     createdAt: Date.now(),
     items: cleanItems.map((it, i) => ({
       id: "i" + (i + 1),

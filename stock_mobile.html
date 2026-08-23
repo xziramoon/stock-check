@@ -616,7 +616,7 @@ function renderRows(){
   if (!job) return;
   const rowsEl = $("#rows");
   rowsEl.innerHTML = "";
-  $("#codeTag").textContent = "#" + code;
+  $("#codeTag").textContent = "#" + code + (job.presetName ? " · " + job.presetName : "");
 
   const { handled, total } = itemProgress();
   $("#progressText").innerHTML = `นับแล้ว <b>${handled}/${total}</b>`;
@@ -821,7 +821,7 @@ function renderSentBox(){
     box.innerHTML = `
       <div class="big-icon">✅</div>
       <div class="st-ok">ส่งผลนับสำเร็จ</div>
-      <div class="sub">รหัสรอบ ${esc(code)} · ผู้นับ ${esc(counterName)} · ส่งเมื่อ ${t}</div>`;
+      <div class="sub">รหัสรอบ ${esc(code)}${job && job.presetName ? " · ชุด " + esc(job.presetName) : ""} · ผู้นับ ${esc(counterName)} · ส่งเมื่อ ${t}</div>`;
   } else {
     box.innerHTML = `
       <div class="big-icon">⏳</div>
