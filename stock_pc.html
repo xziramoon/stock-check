@@ -9,6 +9,7 @@
 <link href="https://fonts.googleapis.com/css2?family=Bai+Jamjuree:wght@500;600;700&family=Sarabun:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500;600&display=swap" rel="stylesheet">
 <script src="https://unpkg.com/mqtt@5/dist/mqtt.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+<script src="https://unpkg.com/qrcode-generator@1.4.4/qrcode.js"></script>
 <style>
 :root{
   --ink:#16232e;
@@ -141,6 +142,8 @@ td select:focus{outline:none;background:rgba(31,111,92,.13)}
   font-family:"IBM Plex Mono",monospace;font-size:64px;font-weight:600;letter-spacing:.12em;
   color:var(--stamp);line-height:1;
 }
+.qrWrap{display:flex;justify-content:center;margin-top:16px}
+.qrWrap svg{width:180px;height:180px;background:#fff;padding:10px;border:1px solid var(--desk-edge);border-radius:var(--radius)}
 .codePanel .branchLine{margin-top:10px;font-size:14px;color:var(--ink-soft)}
 .codePanel .actions{margin-top:18px;display:flex;gap:10px;justify-content:center;flex-wrap:wrap}
 
@@ -776,8 +779,9 @@ function renderCodePanel(){
   if (!activeRound){ wrap.innerHTML = ""; $("#roundTag").textContent = ""; return; }
   wrap.innerHTML = `
     <div class="codePanel">
-      <div class="lbl">รหัสรอบนี้ — บอกพนักงานให้พิมพ์รหัสนี้ในมือถือ</div>
+      <div class="lbl">รหัสรอบนี้ — ให้พนักงานสแกน QR ด้วยกล้องมือถือ (หรือพิมพ์รหัสเองก็ได้)</div>
       <div class="code">${esc(activeRound.code)}</div>
+      <div class="qrWrap" id="qrWrap"></div>
       <div class="branchLine">${esc(activeRound.job.branch)} · ${activeRound.job.items.length} รายการ</div>
       <div class="actions">
         <button class="btn go" id="btnGoStep2">ไปขั้น "รับผล" →</button>
@@ -785,6 +789,23 @@ function renderCodePanel(){
     </div>`;
   $("#roundTag").textContent = "รอบ #" + activeRound.code;
   $("#btnGoStep2")?.addEventListener("click", () => switchTab("2"));
+  renderJoinQr(activeRound.code);
+}
+
+// สร้าง QR ให้สแกนแล้วเข้ารอบนับได้ทันที ไม่ต้องพิมพ์รหัส — ลิงก์ไปหน้ามือถือที่อยู่โฟลเดอร์เดียวกัน
+function renderJoinQr(code){
+  const box = $("#qrWrap");
+  if (!box || typeof qrcode !== "function") return;
+  try {
+    const url = new URL("stock_mobile.html", location.href);
+    url.searchParams.set("code", code);
+    const qr = qrcode(0, "M");
+    qr.addData(url.href);
+    qr.make();
+    box.innerHTML = qr.createSvgTag(5, 8);
+  } catch (e){
+    box.innerHTML = ""; // สแกนไม่ได้ก็ยังพิมพ์รหัสเองได้ตามปกติ
+  }
 }
 renderCodePanel();
 

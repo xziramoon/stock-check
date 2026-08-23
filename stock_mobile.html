@@ -461,6 +461,19 @@ $("#inCode").addEventListener("input", e => {
 $("#inName").addEventListener("input", validateJoinForm);
 validateJoinForm();
 
+// สแกน QR จากคอมมา — เติมรหัสให้อัตโนมัติ ไม่ต้องพิมพ์เอง (เหลือแค่กด "เข้ารอบนับ")
+(function fillCodeFromQr(){
+  const params = new URLSearchParams(location.search);
+  const codeFromQr = params.get("code");
+  if (codeFromQr && /^\d{4}$/.test(codeFromQr)){
+    $("#inCode").value = codeFromQr;
+    validateJoinForm();
+    if (!savedName) $("#inName").focus(); // ยังไม่เคยจำชื่อไว้ — โฟกัสให้พิมพ์ชื่อต่อได้เลย
+  }
+  // ล้าง query string ออกจาก URL กันสับสนตอน refresh/แชร์ลิงก์ต่อ
+  if (params.has("code")) history.replaceState(null, "", location.pathname);
+})();
+
 $("#btnJoin").addEventListener("click", () => {
   code = $("#inCode").value.trim();
   counterName = $("#inName").value.trim();
